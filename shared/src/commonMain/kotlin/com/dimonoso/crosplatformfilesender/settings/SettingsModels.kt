@@ -13,6 +13,7 @@ data class AppSettings(
     val localDeviceId: String = createLocalDeviceId(),
     val discoveryKeyword: String = DefaultDiscoveryKeyword,
     val whitelistFolders: List<WhitelistFolder> = emptyList(),
+    val languageMode: AppLanguageMode = AppLanguageMode.System,
 )
 
 interface SettingsService {
@@ -21,6 +22,8 @@ interface SettingsService {
     fun updateDiscoveryKeyword(keyword: String): Boolean
 
     fun updateWhitelistFolders(folders: List<WhitelistFolder>)
+
+    fun updateLanguageMode(mode: AppLanguageMode)
 }
 
 fun isDiscoveryKeywordChar(char: Char): Boolean =
@@ -28,8 +31,6 @@ fun isDiscoveryKeywordChar(char: Char): Boolean =
 
 fun isValidDiscoveryKeyword(keyword: String): Boolean =
     keyword.isNotBlank() && keyword.all(::isDiscoveryKeywordChar)
-
-fun discoveryKeywordAllowedCharactersLabel(): String = "букви, цифри, _ - . , \" & $"
 
 fun createSettingsService(): SettingsService =
     PersistentSettingsService(createSettingsStore())
@@ -55,6 +56,10 @@ internal class PersistentSettingsService(
 
     override fun updateWhitelistFolders(folders: List<WhitelistFolder>) {
         replace(_settings.value.copy(whitelistFolders = folders))
+    }
+
+    override fun updateLanguageMode(mode: AppLanguageMode) {
+        replace(_settings.value.copy(languageMode = mode))
     }
 
     private fun loadSettings(): AppSettings {

@@ -25,7 +25,7 @@ internal class UdpLanDeviceDiscoveryService(
     private val _devices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     private val _isRunning = MutableStateFlow(false)
     private val _activeConfigSummary = MutableStateFlow<String?>(null)
-    private val _lastError = MutableStateFlow<String?>(null)
+    private val _lastError = MutableStateFlow<DiscoveryError?>(null)
 
     private var activeJob: Job? = null
     private var activeTransport: UdpDiscoveryTransport? = null
@@ -33,7 +33,7 @@ internal class UdpLanDeviceDiscoveryService(
     override val devices: StateFlow<List<DiscoveredDevice>> = _devices
     override val isRunning: StateFlow<Boolean> = _isRunning
     override val activeConfigSummary: StateFlow<String?> = _activeConfigSummary
-    override val lastError: StateFlow<String?> = _lastError
+    override val lastError: StateFlow<DiscoveryError?> = _lastError
 
     override fun start(config: DiscoveryConfig) {
         stop()
@@ -43,13 +43,20 @@ internal class UdpLanDeviceDiscoveryService(
         val permissionState = networkPermissionGateway.currentState()
         if (!permissionState.supportsUdpDiscovery) {
             _isRunning.value = false
-            _lastError.value = permissionState.statusLabel
+            _lastError.value = DiscoveryError(
+                type = DiscoveryErrorType.Unavailable,
+                detail = permissionState.statusLabel,
+            )
             return
         }
 
         val transport = runCatching { transportFactory(config.udpPort) }.getOrElse { exception ->
             _isRunning.value = false
-            _lastError.value = "Не вдалося відкрити UDP порт ${config.udpPort}: ${exception.readableMessage()}"
+            _lastError.value = DiscoveryError(
+                type = DiscoveryErrorType.UdpPortOpenFailed,
+                port = config.udpPort,
+                detail = exception.readableMessage(),
+            )
             return
         }
 
@@ -100,7 +107,10 @@ internal class UdpLanDeviceDiscoveryService(
                 activeTransport = null
                 _isRunning.value = false
                 if (exception != null && exception !is CancellationException) {
-                    _lastError.value = "Пошук зупинився: ${exception.readableMessage()}"
+                    _lastError.value = DiscoveryError(
+                        type = DiscoveryErrorType.SearchStopped,
+                        detail = exception.readableMessage(),
+                    )
                 }
             }
         }
@@ -176,5 +186,5 @@ internal class UdpLanDeviceDiscoveryService(
         filter { device -> nowEpochMillis - device.lastSeenEpochMillis <= staleDeviceTimeoutMillis }
 
     private fun Throwable.readableMessage(): String =
-        message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "невідома помилка"
+        message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "unknown error"
 }

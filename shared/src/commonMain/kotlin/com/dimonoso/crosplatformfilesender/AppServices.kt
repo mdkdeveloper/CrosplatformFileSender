@@ -7,6 +7,8 @@ import com.dimonoso.crosplatformfilesender.discovery.createDeviceDiscoveryServic
 import com.dimonoso.crosplatformfilesender.filesystem.FileSystemService
 import com.dimonoso.crosplatformfilesender.filesystem.InMemoryFileSystemService
 import com.dimonoso.crosplatformfilesender.platform.PlatformServices
+import com.dimonoso.crosplatformfilesender.platform.PlatformFolderPicker
+import com.dimonoso.crosplatformfilesender.platform.createPlatformFolderPicker
 import com.dimonoso.crosplatformfilesender.platform.createPlatformServices
 import com.dimonoso.crosplatformfilesender.settings.SettingsService
 import com.dimonoso.crosplatformfilesender.settings.createSettingsService
@@ -16,6 +18,7 @@ import com.dimonoso.crosplatformfilesender.transfer.TransferQueueService
 
 data class AppServices(
     val platform: PlatformServices,
+    val folderPicker: PlatformFolderPicker,
     val settings: SettingsService,
     val discovery: DeviceDiscoveryService,
     val fileSystem: FileSystemService,
@@ -38,6 +41,7 @@ fun createAppServices(): AppServices {
 
     return AppServices(
         platform = platform,
+        folderPicker = createPlatformFolderPicker(),
         settings = settings,
         discovery = createDeviceDiscoveryService(
             deviceInfo = platform.deviceInfo,

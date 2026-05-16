@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,85 +55,176 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.dimonoso.crosplatformfilesender.archive.ArchiveFormat
 import com.dimonoso.crosplatformfilesender.discovery.DiscoveredDevice
+import com.dimonoso.crosplatformfilesender.discovery.DiscoveryError
+import com.dimonoso.crosplatformfilesender.discovery.DiscoveryErrorType
 import com.dimonoso.crosplatformfilesender.discovery.toLocalDiscoveryConfig
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
+import com.dimonoso.crosplatformfilesender.localization.AppLocaleEnvironment
 import com.dimonoso.crosplatformfilesender.platform.FileSystemAccessPolicy
-import com.dimonoso.crosplatformfilesender.settings.discoveryKeywordAllowedCharactersLabel
+import com.dimonoso.crosplatformfilesender.settings.AppLanguageMode
+import com.dimonoso.crosplatformfilesender.settings.getSystemLanguageCode
 import com.dimonoso.crosplatformfilesender.settings.isDiscoveryKeywordChar
 import com.dimonoso.crosplatformfilesender.settings.isValidDiscoveryKeyword
+import com.dimonoso.crosplatformfilesender.settings.resolveAppLanguage
+import com.dimonoso.crosplatformfilesender.transfer.TransferDirection
 import com.dimonoso.crosplatformfilesender.transfer.TransferEndpoint
 import com.dimonoso.crosplatformfilesender.transfer.TransferItem
 import com.dimonoso.crosplatformfilesender.transfer.TransferStatus
 import com.dimonoso.crosplatformfilesender.transfer.TransferTask
+import crosplatformfilesender.shared.generated.resources.Res
+import crosplatformfilesender.shared.generated.resources.add_folder
+import crosplatformfilesender.shared.generated.resources.add_upload
+import crosplatformfilesender.shared.generated.resources.app_title
+import crosplatformfilesender.shared.generated.resources.archives
+import crosplatformfilesender.shared.generated.resources.cancel
+import crosplatformfilesender.shared.generated.resources.close
+import crosplatformfilesender.shared.generated.resources.device
+import crosplatformfilesender.shared.generated.resources.device_id
+import crosplatformfilesender.shared.generated.resources.discovery
+import crosplatformfilesender.shared.generated.resources.discovery_error_port
+import crosplatformfilesender.shared.generated.resources.discovery_error_stopped
+import crosplatformfilesender.shared.generated.resources.discovery_error_unavailable
+import crosplatformfilesender.shared.generated.resources.drop
+import crosplatformfilesender.shared.generated.resources.empty_or_limited_access
+import crosplatformfilesender.shared.generated.resources.file_entry_subtitle
+import crosplatformfilesender.shared.generated.resources.file_type_drive
+import crosplatformfilesender.shared.generated.resources.file_type_file
+import crosplatformfilesender.shared.generated.resources.file_type_folder
+import crosplatformfilesender.shared.generated.resources.file_type_other
+import crosplatformfilesender.shared.generated.resources.filesystem
+import crosplatformfilesender.shared.generated.resources.found_devices
+import crosplatformfilesender.shared.generated.resources.full_filesystem
+import crosplatformfilesender.shared.generated.resources.keyword
+import crosplatformfilesender.shared.generated.resources.keyword_allowed_characters
+import crosplatformfilesender.shared.generated.resources.keyword_allowed_template
+import crosplatformfilesender.shared.generated.resources.language
+import crosplatformfilesender.shared.generated.resources.language_english
+import crosplatformfilesender.shared.generated.resources.language_system
+import crosplatformfilesender.shared.generated.resources.language_ukrainian
+import crosplatformfilesender.shared.generated.resources.manual_peer
+import crosplatformfilesender.shared.generated.resources.my_files
+import crosplatformfilesender.shared.generated.resources.no_active_whitelist_folders
+import crosplatformfilesender.shared.generated.resources.no_found_devices
+import crosplatformfilesender.shared.generated.resources.no_remote_files_available
+import crosplatformfilesender.shared.generated.resources.open
+import crosplatformfilesender.shared.generated.resources.pause
+import crosplatformfilesender.shared.generated.resources.persistence
+import crosplatformfilesender.shared.generated.resources.platform
+import crosplatformfilesender.shared.generated.resources.queue
+import crosplatformfilesender.shared.generated.resources.queue_empty
+import crosplatformfilesender.shared.generated.resources.queue_progress
+import crosplatformfilesender.shared.generated.resources.remote_files
+import crosplatformfilesender.shared.generated.resources.remove
+import crosplatformfilesender.shared.generated.resources.request_download
+import crosplatformfilesender.shared.generated.resources.resume
+import crosplatformfilesender.shared.generated.resources.save
+import crosplatformfilesender.shared.generated.resources.scoped_storage
+import crosplatformfilesender.shared.generated.resources.search_active
+import crosplatformfilesender.shared.generated.resources.search_off
+import crosplatformfilesender.shared.generated.resources.settings_tab
+import crosplatformfilesender.shared.generated.resources.settings_title
+import crosplatformfilesender.shared.generated.resources.start
+import crosplatformfilesender.shared.generated.resources.start_search_first
+import crosplatformfilesender.shared.generated.resources.status_cancelled
+import crosplatformfilesender.shared.generated.resources.status_completed
+import crosplatformfilesender.shared.generated.resources.status_failed
+import crosplatformfilesender.shared.generated.resources.status_paused
+import crosplatformfilesender.shared.generated.resources.status_pending
+import crosplatformfilesender.shared.generated.resources.status_running
+import crosplatformfilesender.shared.generated.resources.stop
+import crosplatformfilesender.shared.generated.resources.task_cancel
+import crosplatformfilesender.shared.generated.resources.to_roots
+import crosplatformfilesender.shared.generated.resources.transfer_direction_download
+import crosplatformfilesender.shared.generated.resources.transfer_direction_upload
+import crosplatformfilesender.shared.generated.resources.transfer_queue
+import crosplatformfilesender.shared.generated.resources.transfer_subtitle
+import crosplatformfilesender.shared.generated.resources.udp_lan
+import crosplatformfilesender.shared.generated.resources.whitelist_empty
+import crosplatformfilesender.shared.generated.resources.whitelist_folders
+import crosplatformfilesender.shared.generated.resources.workspace_tab
+import crosplatformfilesender.shared.generated.resources.workspace_title
 import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.stringResource
 
-private enum class AppSection(val title: String) {
-    Workspace("Файли"),
-    Settings("Налаштування"),
+private enum class AppSection {
+    Workspace,
+    Settings,
 }
 
 @Composable
 @Preview
 fun App() {
     val services = remember { createAppServices() }
+    val settings by services.settings.settings.collectAsState()
+    val systemLanguageCode = remember { getSystemLanguageCode() }
+    val resolvedLanguage = resolveAppLanguage(settings.languageMode, systemLanguageCode)
     var selectedSection by remember { mutableStateOf(AppSection.Workspace) }
     var showQueueDialog by remember { mutableStateOf(false) }
 
-    MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            Column(
-                modifier = Modifier
-                    .safeContentPadding()
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+    AppLocaleEnvironment(resolvedLanguage.localeTag) {
+        MaterialTheme {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background,
             ) {
-                AppHeader(
-                    services = services,
-                    onQueueClick = { showQueueDialog = true },
-                )
-                PrimaryTabRow(selectedTabIndex = selectedSection.ordinal) {
-                    AppSection.entries.forEach { section ->
-                        Tab(
-                            selected = selectedSection == section,
-                            onClick = { selectedSection = section },
-                            text = {
-                                Text(
-                                    text = section.title,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                        )
-                    }
-                }
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
+                        .safeContentPadding()
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    when (selectedSection) {
-                        AppSection.Workspace -> WorkspaceSection(services)
-                        AppSection.Settings -> SettingsSection(services)
+                    AppHeader(
+                        services = services,
+                        onQueueClick = { showQueueDialog = true },
+                    )
+                    PrimaryTabRow(selectedTabIndex = selectedSection.ordinal) {
+                        AppSection.entries.forEach { section ->
+                            Tab(
+                                selected = selectedSection == section,
+                                onClick = { selectedSection = section },
+                                text = {
+                                    Text(
+                                        text = sectionTitle(section),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        when (selectedSection) {
+                            AppSection.Workspace -> WorkspaceSection(services)
+                            AppSection.Settings -> SettingsSection(services)
+                        }
                     }
                 }
-            }
 
-            if (showQueueDialog) {
-                QueueDialog(
-                    services = services,
-                    onDismiss = { showQueueDialog = false },
-                )
+                if (showQueueDialog) {
+                    QueueDialog(
+                        services = services,
+                        onDismiss = { showQueueDialog = false },
+                    )
+                }
             }
         }
     }
 }
+
+@Composable
+private fun sectionTitle(section: AppSection): String =
+    when (section) {
+        AppSection.Workspace -> stringResource(Res.string.workspace_tab)
+        AppSection.Settings -> stringResource(Res.string.settings_tab)
+    }
 
 @Composable
 private fun AppHeader(
@@ -141,8 +233,8 @@ private fun AppHeader(
 ) {
     val networkState = remember(services) { services.platform.networkPermissions.currentState() }
     val accessLabel = when (services.platform.fileSystem.accessPolicy) {
-        FileSystemAccessPolicy.FullFileSystem -> "Повний filesystem"
-        FileSystemAccessPolicy.ScopedStorage -> "Scoped storage"
+        FileSystemAccessPolicy.FullFileSystem -> stringResource(Res.string.full_filesystem)
+        FileSystemAccessPolicy.ScopedStorage -> stringResource(Res.string.scoped_storage)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -153,7 +245,7 @@ private fun AppHeader(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Crossplatform File Sender",
+                    text = stringResource(Res.string.app_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -172,7 +264,7 @@ private fun AppHeader(
             StatusPill(text = services.platform.deviceInfo.displayName)
             StatusPill(text = accessLabel)
             StatusPill(text = networkState.statusLabel)
-            StatusPill(text = "UDP LAN")
+            StatusPill(text = stringResource(Res.string.udp_lan))
         }
     }
 }
@@ -184,7 +276,9 @@ private fun QueueButton(
 ) {
     val tasks by services.transferQueue.tasks.collectAsState()
     val progress = remember(tasks) { queueProgress(tasks) }
-    val label = progress?.let { "Черга ${(it * 100).roundToInt()}%" } ?: "Черга"
+    val label = progress?.let {
+        stringResource(Res.string.queue_progress, (it * 100).roundToInt().toString())
+    } ?: stringResource(Res.string.queue)
 
     OutlinedButton(onClick = onClick) {
         Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -199,7 +293,7 @@ private fun WorkspaceSection(services: AppServices) {
     val configSummary by services.discovery.activeConfigSummary.collectAsState()
     val lastError by services.discovery.lastError.collectAsState()
 
-    SectionColumn(title = "Пристрої та файли") {
+    SectionColumn(title = stringResource(Res.string.workspace_title)) {
         DiscoveryControls(
             services = services,
             keyword = settings.discoveryKeyword,
@@ -222,7 +316,7 @@ private fun DiscoveryControls(
     keyword: String,
     isRunning: Boolean,
     configSummary: String?,
-    lastError: String?,
+    lastError: DiscoveryError?,
 ) {
     val canStart = isValidDiscoveryKeyword(keyword)
 
@@ -243,13 +337,19 @@ private fun DiscoveryControls(
                 }
             },
         ) {
-            Text(if (isRunning) "Стоп" else "Старт")
+            Text(if (isRunning) stringResource(Res.string.stop) else stringResource(Res.string.start))
         }
-        StatusPill(text = if (isRunning) "Пошук активний" else "Пошук вимкнено")
+        StatusPill(
+            text = if (isRunning) {
+                stringResource(Res.string.search_active)
+            } else {
+                stringResource(Res.string.search_off)
+            },
+        )
     }
 
     lastError?.let { error ->
-        ErrorState(error)
+        ErrorState(discoveryErrorText(error))
     } ?: configSummary?.let { summary ->
         Text(
             text = summary,
@@ -262,10 +362,22 @@ private fun DiscoveryControls(
 }
 
 @Composable
+private fun discoveryErrorText(error: DiscoveryError): String =
+    when (error.type) {
+        DiscoveryErrorType.UdpPortOpenFailed -> stringResource(
+            Res.string.discovery_error_port,
+            error.port?.toString().orEmpty(),
+            error.detail,
+        )
+        DiscoveryErrorType.SearchStopped -> stringResource(Res.string.discovery_error_stopped, error.detail)
+        DiscoveryErrorType.Unavailable -> stringResource(Res.string.discovery_error_unavailable, error.detail)
+    }
+
+@Composable
 private fun DevicesPanel(devices: List<DiscoveredDevice>) {
-    SectionColumn(title = "Знайдені пристрої") {
+    SectionColumn(title = stringResource(Res.string.found_devices)) {
         if (devices.isEmpty()) {
-            EmptyState("Немає знайдених пристроїв")
+            EmptyState(stringResource(Res.string.no_found_devices))
         } else {
             devices.forEach { device ->
                 DeviceDropZone(device)
@@ -280,14 +392,14 @@ private fun LocalFilesPanel(services: AppServices) {
     var currentPath by remember { mutableStateOf<String?>(null) }
     val entries = currentPath?.let(services.fileSystem::browseLocal) ?: roots
 
-    SectionColumn(title = currentPath ?: "Мої файли") {
+    SectionColumn(title = currentPath ?: stringResource(Res.string.my_files)) {
         if (currentPath != null) {
             OutlinedButton(onClick = { currentPath = null }) {
-                Text("До коренів")
+                Text(stringResource(Res.string.to_roots))
             }
         }
         if (entries.isEmpty()) {
-            EmptyState("Порожньо або доступ обмежено")
+            EmptyState(stringResource(Res.string.empty_or_limited_access))
         } else {
             entries.forEach { entry ->
                 FileEntryRow(
@@ -295,7 +407,7 @@ private fun LocalFilesPanel(services: AppServices) {
                     trailing = {
                         if (entry.isBrowseable) {
                             TextButton(onClick = { currentPath = entry.path }) {
-                                Text("Відкрити")
+                                Text(stringResource(Res.string.open))
                             }
                         }
                     },
@@ -312,16 +424,16 @@ private fun RemoteFilesPanel(services: AppServices) {
     val selectedDevice = devices.firstOrNull()
     val entries = selectedDevice?.let { services.fileSystem.browseRemote(it) }.orEmpty()
 
-    SectionColumn(title = "Віддалені файли") {
+    SectionColumn(title = stringResource(Res.string.remote_files)) {
         if (selectedDevice == null) {
-            EmptyState("Спершу запустіть пошук пристроїв")
+            EmptyState(stringResource(Res.string.start_search_first))
         } else {
             DeviceRow(selectedDevice)
             HorizontalDivider()
             if (whitelist.none { it.enabled }) {
-                EmptyState("Немає активних whitelist папок")
+                EmptyState(stringResource(Res.string.no_active_whitelist_folders))
             } else if (entries.isEmpty()) {
-                EmptyState("Немає доступних віддалених файлів")
+                EmptyState(stringResource(Res.string.no_remote_files_available))
             } else {
                 entries.forEach { entry ->
                     FileEntryRow(entry = entry)
@@ -334,7 +446,6 @@ private fun RemoteFilesPanel(services: AppServices) {
 @Composable
 private fun SettingsSection(services: AppServices) {
     val settings by services.settings.settings.collectAsState()
-    val roots = remember(services) { services.fileSystem.localRoots() }
     val whitelist by services.fileSystem.whitelist.collectAsState()
     val networkState = remember(services) { services.platform.networkPermissions.currentState() }
     val archiveFormats = remember(services) {
@@ -352,7 +463,12 @@ private fun SettingsSection(services: AppServices) {
         keywordDraft = settings.discoveryKeyword
     }
 
-    SectionColumn(title = "Налаштування") {
+    SectionColumn(title = stringResource(Res.string.settings_title)) {
+        LanguageSettings(
+            currentMode = settings.languageMode,
+            onModeChange = services.settings::updateLanguageMode,
+        )
+        HorizontalDivider()
         KeywordSettings(
             keyword = settings.discoveryKeyword,
             keywordDraft = keywordDraft,
@@ -369,18 +485,69 @@ private fun SettingsSection(services: AppServices) {
         )
         HorizontalDivider()
         WhitelistSettings(
-            roots = roots,
             whitelist = whitelist,
             services = services,
         )
         HorizontalDivider()
-        SettingRow(label = "Платформа", value = services.platform.deviceInfo.platformName)
-        SettingRow(label = "Пристрій", value = services.platform.deviceInfo.displayName)
-        SettingRow(label = "Device ID", value = settings.localDeviceId)
-        SettingRow(label = "Filesystem", value = services.platform.fileSystem.accessPolicy.name)
-        SettingRow(label = "Discovery", value = networkState.statusLabel)
-        SettingRow(label = "Архіви", value = archiveFormats)
-        SettingRow(label = "Persistence", value = "settings.config")
+        SettingRow(label = stringResource(Res.string.platform), value = services.platform.deviceInfo.platformName)
+        SettingRow(label = stringResource(Res.string.device), value = services.platform.deviceInfo.displayName)
+        SettingRow(label = stringResource(Res.string.device_id), value = settings.localDeviceId)
+        SettingRow(label = stringResource(Res.string.filesystem), value = services.platform.fileSystem.accessPolicy.name)
+        SettingRow(label = stringResource(Res.string.discovery), value = networkState.statusLabel)
+        SettingRow(label = stringResource(Res.string.archives), value = archiveFormats)
+        SettingRow(label = stringResource(Res.string.persistence), value = "settings.config")
+    }
+}
+
+@Composable
+private fun LanguageSettings(
+    currentMode: AppLanguageMode,
+    onModeChange: (AppLanguageMode) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = stringResource(Res.string.language),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LanguageModeButton(
+                mode = AppLanguageMode.System,
+                label = stringResource(Res.string.language_system),
+                selectedMode = currentMode,
+                onModeChange = onModeChange,
+            )
+            LanguageModeButton(
+                mode = AppLanguageMode.English,
+                label = stringResource(Res.string.language_english),
+                selectedMode = currentMode,
+                onModeChange = onModeChange,
+            )
+            LanguageModeButton(
+                mode = AppLanguageMode.Ukrainian,
+                label = stringResource(Res.string.language_ukrainian),
+                selectedMode = currentMode,
+                onModeChange = onModeChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LanguageModeButton(
+    mode: AppLanguageMode,
+    label: String,
+    selectedMode: AppLanguageMode,
+    onModeChange: (AppLanguageMode) -> Unit,
+) {
+    if (selectedMode == mode) {
+        Button(onClick = { onModeChange(mode) }) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = { onModeChange(mode) }) {
+            Text(label)
+        }
     }
 }
 
@@ -394,6 +561,7 @@ private fun KeywordSettings(
     onSave: () -> Unit,
 ) {
     val canSave = isValidDiscoveryKeyword(keywordDraft) && keywordDraft.trim() != keyword
+    val allowedCharacters = stringResource(Res.string.keyword_allowed_characters)
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedTextField(
@@ -405,7 +573,7 @@ private fun KeywordSettings(
             readOnly = !showKeyword,
             singleLine = true,
             isError = showKeyword && keywordDraft.isNotBlank() && !isValidDiscoveryKeyword(keywordDraft),
-            label = { Text("Ключове слово") },
+            label = { Text(stringResource(Res.string.keyword)) },
             trailingIcon = {
                 IconButton(onClick = { onShowKeywordChange(!showKeyword) }) {
                     EyeIcon(visible = showKeyword)
@@ -413,7 +581,7 @@ private fun KeywordSettings(
             },
             supportingText = {
                 if (showKeyword) {
-                    Text("Дозволено: ${discoveryKeywordAllowedCharactersLabel()}")
+                    Text(stringResource(Res.string.keyword_allowed_template, allowedCharacters))
                 }
             },
         )
@@ -422,13 +590,13 @@ private fun KeywordSettings(
                 enabled = showKeyword && canSave,
                 onClick = onSave,
             ) {
-                Text("Зберегти")
+                Text(stringResource(Res.string.save))
             }
             OutlinedButton(
                 enabled = showKeyword && keywordDraft != keyword,
                 onClick = { onKeywordDraftChange(keyword) },
             ) {
-                Text("Скасувати")
+                Text(stringResource(Res.string.cancel))
             }
         }
     }
@@ -436,35 +604,33 @@ private fun KeywordSettings(
 
 @Composable
 private fun WhitelistSettings(
-    roots: List<FileEntry>,
     whitelist: List<WhitelistFolder>,
     services: AppServices,
 ) {
-    SectionColumn(title = "Whitelist папок і дисків") {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            roots.forEach { root ->
-                OutlinedButton(
-                    onClick = {
-                        services.fileSystem.addWhitelistFolder(
-                            WhitelistFolder(
-                                id = "whitelist-${root.path.hashCode()}",
-                                displayName = root.name,
-                                path = root.path,
-                            ),
-                        )
-                    },
-                ) {
-                    Text("Додати ${root.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+    SectionColumn(title = stringResource(Res.string.whitelist_folders)) {
+        Button(
+            enabled = services.folderPicker.isAvailable,
+            onClick = {
+                services.folderPicker.pickFolder { folder ->
+                    services.fileSystem.addWhitelistFolder(
+                        WhitelistFolder(
+                            id = "whitelist-${folder.path.hashCode()}",
+                            displayName = folder.displayName,
+                            path = folder.path,
+                        ),
+                    )
                 }
-            }
+            },
+        ) {
+            Text(stringResource(Res.string.add_folder))
         }
         if (whitelist.isEmpty()) {
-            EmptyState("Whitelist порожній")
+            EmptyState(stringResource(Res.string.whitelist_empty))
         } else {
             whitelist.forEach { folder ->
                 WhitelistRow(
                     folder = folder,
-                    onToggle = { services.fileSystem.setWhitelistEnabled(folder.id, !folder.enabled) },
+                    onEnabledChange = { enabled -> services.fileSystem.setWhitelistEnabled(folder.id, enabled) },
                     onRemove = { services.fileSystem.removeWhitelistFolder(folder.id) },
                 )
             }
@@ -482,7 +648,7 @@ private fun QueueDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Черга передач") },
+        title = { Text(stringResource(Res.string.transfer_queue)) },
         text = {
             Column(
                 modifier = Modifier
@@ -499,14 +665,20 @@ private fun QueueDialog(
                 }
                 QueueActions(services)
                 if (tasks.isEmpty()) {
-                    EmptyState("Черга порожня")
+                    EmptyState(stringResource(Res.string.queue_empty))
                 } else {
                     tasks.forEach { task ->
+                        val direction = transferDirectionLabel(task.direction)
                         TaskRow(
                             taskId = task.id,
                             title = task.item.displayName,
                             status = task.status,
-                            subtitle = "${task.direction}: ${task.source.displayName} -> ${task.target.displayName}",
+                            subtitle = stringResource(
+                                Res.string.transfer_subtitle,
+                                direction,
+                                task.source.displayName,
+                                task.target.displayName,
+                            ),
                             onPause = { services.transferQueue.pause(task.id) },
                             onResume = { services.transferQueue.resume(task.id) },
                             onCancel = { services.transferQueue.cancel(task.id) },
@@ -517,7 +689,7 @@ private fun QueueDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Закрити")
+                Text(stringResource(Res.string.close))
             }
         },
     )
@@ -526,8 +698,9 @@ private fun QueueDialog(
 @Composable
 private fun QueueActions(services: AppServices) {
     val devices by services.discovery.devices.collectAsState()
+    val manualPeerLabel = stringResource(Res.string.manual_peer)
     val target = devices.firstOrNull()?.let { TransferEndpoint(it.id, it.displayName) }
-        ?: TransferEndpoint("manual-peer", "Manual peer")
+        ?: TransferEndpoint("manual-peer", manualPeerLabel)
 
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
@@ -543,7 +716,7 @@ private fun QueueActions(services: AppServices) {
                 )
             },
         ) {
-            Text("Додати відправку")
+            Text(stringResource(Res.string.add_upload))
         }
         OutlinedButton(
             onClick = {
@@ -558,7 +731,7 @@ private fun QueueActions(services: AppServices) {
                 )
             },
         ) {
-            Text("Запитати отримання")
+            Text(stringResource(Res.string.request_download))
         }
     }
 }
@@ -607,7 +780,7 @@ private fun DeviceDropZone(device: DiscoveredDevice) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            StatusPill(text = "Drop")
+            StatusPill(text = stringResource(Res.string.drop))
         }
     }
 }
@@ -633,16 +806,11 @@ private fun FileEntryRow(
     trailing: @Composable (() -> Unit)? = null,
 ) {
     RowSurface {
-        val typeLabel = when (entry.type) {
-            FileEntryType.Drive -> "Диск"
-            FileEntryType.Directory -> "Папка"
-            FileEntryType.File -> "Файл"
-            FileEntryType.Unknown -> "Інше"
-        }
+        val typeLabel = fileEntryTypeLabel(entry.type)
         Column(modifier = Modifier.weight(1f)) {
             Text(entry.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                text = "$typeLabel | ${entry.path}",
+                text = stringResource(Res.string.file_entry_subtitle, typeLabel, entry.path),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -654,9 +822,18 @@ private fun FileEntryRow(
 }
 
 @Composable
+private fun fileEntryTypeLabel(type: FileEntryType): String =
+    when (type) {
+        FileEntryType.Drive -> stringResource(Res.string.file_type_drive)
+        FileEntryType.Directory -> stringResource(Res.string.file_type_folder)
+        FileEntryType.File -> stringResource(Res.string.file_type_file)
+        FileEntryType.Unknown -> stringResource(Res.string.file_type_other)
+    }
+
+@Composable
 private fun WhitelistRow(
     folder: WhitelistFolder,
-    onToggle: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
     onRemove: () -> Unit,
 ) {
     RowSurface {
@@ -670,11 +847,12 @@ private fun WhitelistRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        OutlinedButton(onClick = onToggle) {
-            Text(if (folder.enabled) "Вимкнути" else "Увімкнути")
-        }
+        Switch(
+            checked = folder.enabled,
+            onCheckedChange = onEnabledChange,
+        )
         TextButton(onClick = onRemove) {
-            Text("Прибрати")
+            Text(stringResource(Res.string.remove))
         }
     }
 }
@@ -700,21 +878,39 @@ private fun TaskRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        StatusPill(text = status.name)
+        StatusPill(text = transferStatusLabel(status))
         if (status == TransferStatus.Paused) {
             TextButton(onClick = onResume) {
-                Text("Resume")
+                Text(stringResource(Res.string.resume))
             }
         } else {
             TextButton(onClick = onPause, enabled = status != TransferStatus.Cancelled) {
-                Text("Pause")
+                Text(stringResource(Res.string.pause))
             }
         }
         TextButton(onClick = onCancel, enabled = status != TransferStatus.Cancelled) {
-            Text("Cancel")
+            Text(stringResource(Res.string.task_cancel))
         }
     }
 }
+
+@Composable
+private fun transferDirectionLabel(direction: TransferDirection): String =
+    when (direction) {
+        TransferDirection.Upload -> stringResource(Res.string.transfer_direction_upload)
+        TransferDirection.Download -> stringResource(Res.string.transfer_direction_download)
+    }
+
+@Composable
+private fun transferStatusLabel(status: TransferStatus): String =
+    when (status) {
+        TransferStatus.Pending -> stringResource(Res.string.status_pending)
+        TransferStatus.Running -> stringResource(Res.string.status_running)
+        TransferStatus.Paused -> stringResource(Res.string.status_paused)
+        TransferStatus.Completed -> stringResource(Res.string.status_completed)
+        TransferStatus.Failed -> stringResource(Res.string.status_failed)
+        TransferStatus.Cancelled -> stringResource(Res.string.status_cancelled)
+    }
 
 @Composable
 private fun SettingRow(label: String, value: String) {

@@ -6,12 +6,14 @@ internal object SettingsConfigCodec {
     private const val DeviceIdKey = "device.id"
     private const val KeywordKey = "discovery.keyword"
     private const val WhitelistCountKey = "whitelist.count"
+    private const val LanguageKey = "ui.language"
 
     fun encode(settings: AppSettings): String =
         buildString {
             appendLine("# CrosplatformFileSender settings")
             appendLine("$DeviceIdKey=${settings.localDeviceId.escapeConfigValue()}")
             appendLine("$KeywordKey=${settings.discoveryKeyword.escapeConfigValue()}")
+            appendLine("$LanguageKey=${settings.languageMode.configValue}")
             appendLine("$WhitelistCountKey=${settings.whitelistFolders.size}")
             settings.whitelistFolders.forEachIndexed { index, folder ->
                 appendLine("whitelist.$index.id=${folder.id.escapeConfigValue()}")
@@ -40,6 +42,7 @@ internal object SettingsConfigCodec {
             ?.takeIf(::isValidDiscoveryKeyword)
             ?: DefaultDiscoveryKeyword
         val localDeviceId = properties[DeviceIdKey]?.takeIf { it.isNotBlank() } ?: AppSettings().localDeviceId
+        val languageMode = AppLanguageMode.fromConfigValue(properties[LanguageKey])
         val whitelistCount = properties[WhitelistCountKey]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val folders = (0 until whitelistCount).mapNotNull { index ->
             val prefix = "whitelist.$index"
@@ -56,6 +59,7 @@ internal object SettingsConfigCodec {
             localDeviceId = localDeviceId,
             discoveryKeyword = keyword,
             whitelistFolders = folders,
+            languageMode = languageMode,
         )
     }
 }

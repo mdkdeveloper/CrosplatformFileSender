@@ -42,11 +42,23 @@ data class DiscoveredDevice(
     val protocol: DiscoveryProtocol = DiscoveryProtocol.UdpLan,
 )
 
+enum class DiscoveryErrorType {
+    UdpPortOpenFailed,
+    SearchStopped,
+    Unavailable,
+}
+
+data class DiscoveryError(
+    val type: DiscoveryErrorType,
+    val port: Int? = null,
+    val detail: String = "",
+)
+
 interface DeviceDiscoveryService {
     val devices: StateFlow<List<DiscoveredDevice>>
     val isRunning: StateFlow<Boolean>
     val activeConfigSummary: StateFlow<String?>
-    val lastError: StateFlow<String?>
+    val lastError: StateFlow<DiscoveryError?>
 
     fun start(config: DiscoveryConfig)
 

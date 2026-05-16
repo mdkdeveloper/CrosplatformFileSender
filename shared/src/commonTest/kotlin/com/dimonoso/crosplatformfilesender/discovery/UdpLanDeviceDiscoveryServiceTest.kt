@@ -5,9 +5,9 @@ import com.dimonoso.crosplatformfilesender.platform.NetworkPermissionState
 import com.dimonoso.crosplatformfilesender.platform.PlatformDeviceInfo
 import com.dimonoso.crosplatformfilesender.platform.PlatformFamily
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 class UdpLanDeviceDiscoveryServiceTest {
     @Test
@@ -38,7 +38,8 @@ class UdpLanDeviceDiscoveryServiceTest {
         )
 
         assertFalse(service.isRunning.value)
-        assertNotNull(service.lastError.value)
-        assertTrue(service.lastError.value.orEmpty().contains("socket unavailable"))
+        val error = assertNotNull(service.lastError.value)
+        assertEquals(DiscoveryErrorType.UdpPortOpenFailed, error.type)
+        assertEquals("socket unavailable", error.detail)
     }
 }

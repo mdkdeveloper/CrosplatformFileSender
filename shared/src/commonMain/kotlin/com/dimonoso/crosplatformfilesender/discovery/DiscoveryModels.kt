@@ -1,5 +1,6 @@
 package com.dimonoso.crosplatformfilesender.discovery
 
+import com.dimonoso.crosplatformfilesender.platform.NetworkPermissionGateway
 import com.dimonoso.crosplatformfilesender.platform.PlatformDeviceInfo
 import kotlinx.coroutines.flow.StateFlow
 
@@ -12,6 +13,7 @@ data class DiscoveryConfig(
     val deviceAlias: String,
     val udpPort: Int = 47777,
     val broadcastIntervalMillis: Long = 2_000L,
+    val staleDeviceTimeoutMillis: Long = 12_000L,
     val protocol: DiscoveryProtocol = DiscoveryProtocol.UdpLan,
 ) {
     init {
@@ -19,10 +21,11 @@ data class DiscoveryConfig(
         require(deviceAlias.isNotBlank()) { "Device alias must not be blank." }
         require(udpPort in 1..65535) { "UDP port must be between 1 and 65535." }
         require(broadcastIntervalMillis > 0) { "Broadcast interval must be positive." }
+        require(staleDeviceTimeoutMillis > 0) { "Stale device timeout must be positive." }
     }
 
     fun toDisplaySummary(): String =
-        "DiscoveryConfig(deviceAlias=$deviceAlias, udpPort=$udpPort, broadcastIntervalMillis=$broadcastIntervalMillis, protocol=$protocol, keyword=<redacted>)"
+        "DiscoveryConfig(deviceAlias=$deviceAlias, udpPort=$udpPort, broadcastIntervalMillis=$broadcastIntervalMillis, staleDeviceTimeoutMillis=$staleDeviceTimeoutMillis, protocol=$protocol, keyword=<redacted>)"
 
     override fun toString(): String = toDisplaySummary()
 }
@@ -52,3 +55,8 @@ fun PlatformDeviceInfo.toLocalDiscoveryConfig(keyword: String): DiscoveryConfig 
         keyword = keyword,
         deviceAlias = displayName,
     )
+
+expect fun createDeviceDiscoveryService(
+    deviceInfo: PlatformDeviceInfo,
+    networkPermissionGateway: NetworkPermissionGateway,
+): DeviceDiscoveryService

@@ -3,7 +3,7 @@ package com.dimonoso.crosplatformfilesender
 import com.dimonoso.crosplatformfilesender.archive.ArchiveService
 import com.dimonoso.crosplatformfilesender.archive.StubArchiveService
 import com.dimonoso.crosplatformfilesender.discovery.DeviceDiscoveryService
-import com.dimonoso.crosplatformfilesender.discovery.StubDeviceDiscoveryService
+import com.dimonoso.crosplatformfilesender.discovery.createDeviceDiscoveryService
 import com.dimonoso.crosplatformfilesender.filesystem.FileSystemService
 import com.dimonoso.crosplatformfilesender.filesystem.InMemoryFileSystemService
 import com.dimonoso.crosplatformfilesender.platform.PlatformServices
@@ -29,7 +29,7 @@ fun createAppServices(): AppServices {
 
     return AppServices(
         platform = platform,
-        discovery = StubDeviceDiscoveryService(
+        discovery = createDeviceDiscoveryService(
             deviceInfo = platform.deviceInfo,
             networkPermissionGateway = platform.networkPermissions,
         ),

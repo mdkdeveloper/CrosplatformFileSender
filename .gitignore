@@ -42,6 +42,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+settings.config
 
 # Optional JS tooling
 node_modules/

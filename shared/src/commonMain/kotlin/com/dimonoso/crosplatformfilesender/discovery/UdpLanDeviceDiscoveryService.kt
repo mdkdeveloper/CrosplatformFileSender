@@ -25,6 +25,7 @@ internal class UdpLanDeviceDiscoveryService(
     private val _devices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     private val _isRunning = MutableStateFlow(false)
     private val _activeConfigSummary = MutableStateFlow<String?>(null)
+    private val _lastError = MutableStateFlow<String?>(null)
 
     private var activeJob: Job? = null
     private var activeTransport: UdpDiscoveryTransport? = null
@@ -32,19 +33,23 @@ internal class UdpLanDeviceDiscoveryService(
     override val devices: StateFlow<List<DiscoveredDevice>> = _devices
     override val isRunning: StateFlow<Boolean> = _isRunning
     override val activeConfigSummary: StateFlow<String?> = _activeConfigSummary
+    override val lastError: StateFlow<String?> = _lastError
 
     override fun start(config: DiscoveryConfig) {
         stop()
         _activeConfigSummary.value = config.toDisplaySummary()
+        _lastError.value = null
 
         val permissionState = networkPermissionGateway.currentState()
         if (!permissionState.supportsUdpDiscovery) {
             _isRunning.value = false
+            _lastError.value = permissionState.statusLabel
             return
         }
 
-        val transport = runCatching { transportFactory(config.udpPort) }.getOrElse {
+        val transport = runCatching { transportFactory(config.udpPort) }.getOrElse { exception ->
             _isRunning.value = false
+            _lastError.value = "Не вдалося відкрити UDP порт ${config.udpPort}: ${exception.readableMessage()}"
             return
         }
 
@@ -90,10 +95,13 @@ internal class UdpLanDeviceDiscoveryService(
         }
 
         activeJob = job
-        job.invokeOnCompletion {
+        job.invokeOnCompletion { exception ->
             if (activeJob === job) {
                 activeTransport = null
                 _isRunning.value = false
+                if (exception != null && exception !is CancellationException) {
+                    _lastError.value = "Пошук зупинився: ${exception.readableMessage()}"
+                }
             }
         }
     }
@@ -108,6 +116,7 @@ internal class UdpLanDeviceDiscoveryService(
         _isRunning.value = false
         _devices.value = emptyList()
         _activeConfigSummary.value = null
+        _lastError.value = null
     }
 
     private suspend fun broadcastOnce(transport: UdpDiscoveryTransport, payload: ByteArray) {
@@ -165,4 +174,7 @@ internal class UdpLanDeviceDiscoveryService(
         staleDeviceTimeoutMillis: Long,
     ): List<DiscoveredDevice> =
         filter { device -> nowEpochMillis - device.lastSeenEpochMillis <= staleDeviceTimeoutMillis }
+
+    private fun Throwable.readableMessage(): String =
+        message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "невідома помилка"
 }

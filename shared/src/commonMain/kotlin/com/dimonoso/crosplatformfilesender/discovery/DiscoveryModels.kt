@@ -2,6 +2,7 @@ package com.dimonoso.crosplatformfilesender.discovery
 
 import com.dimonoso.crosplatformfilesender.platform.NetworkPermissionGateway
 import com.dimonoso.crosplatformfilesender.platform.PlatformDeviceInfo
+import com.dimonoso.crosplatformfilesender.settings.isValidDiscoveryKeyword
 import kotlinx.coroutines.flow.StateFlow
 
 enum class DiscoveryProtocol {
@@ -18,6 +19,7 @@ data class DiscoveryConfig(
 ) {
     init {
         require(keyword.isNotBlank()) { "Discovery keyword must not be blank." }
+        require(isValidDiscoveryKeyword(keyword)) { "Discovery keyword contains unsupported characters." }
         require(deviceAlias.isNotBlank()) { "Device alias must not be blank." }
         require(udpPort in 1..65535) { "UDP port must be between 1 and 65535." }
         require(broadcastIntervalMillis > 0) { "Broadcast interval must be positive." }
@@ -44,6 +46,7 @@ interface DeviceDiscoveryService {
     val devices: StateFlow<List<DiscoveredDevice>>
     val isRunning: StateFlow<Boolean>
     val activeConfigSummary: StateFlow<String?>
+    val lastError: StateFlow<String?>
 
     fun start(config: DiscoveryConfig)
 

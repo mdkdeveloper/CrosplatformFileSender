@@ -13,16 +13,23 @@ class StubDeviceDiscoveryService(
     private val _devices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     private val _isRunning = MutableStateFlow(false)
     private val _activeConfigSummary = MutableStateFlow<String?>(null)
+    private val _lastError = MutableStateFlow<String?>(null)
 
     override val devices: StateFlow<List<DiscoveredDevice>> = _devices
     override val isRunning: StateFlow<Boolean> = _isRunning
     override val activeConfigSummary: StateFlow<String?> = _activeConfigSummary
+    override val lastError: StateFlow<String?> = _lastError
 
     override fun start(config: DiscoveryConfig) {
         val permissionState = networkPermissionGateway.currentState()
 
         _isRunning.value = permissionState.supportsUdpDiscovery
         _activeConfigSummary.value = config.toDisplaySummary()
+        _lastError.value = if (permissionState.supportsUdpDiscovery) {
+            null
+        } else {
+            permissionState.statusLabel
+        }
         _devices.value = if (permissionState.supportsUdpDiscovery) {
             listOf(
                 DiscoveredDevice(
@@ -43,5 +50,6 @@ class StubDeviceDiscoveryService(
         _isRunning.value = false
         _devices.value = emptyList()
         _activeConfigSummary.value = null
+        _lastError.value = null
     }
 }

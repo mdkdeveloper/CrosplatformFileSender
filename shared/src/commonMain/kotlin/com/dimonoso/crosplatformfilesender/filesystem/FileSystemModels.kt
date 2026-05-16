@@ -46,8 +46,10 @@ interface FileSystemService {
 
 class InMemoryFileSystemService(
     private val platformFileSystem: PlatformFileSystem,
+    initialWhitelist: List<WhitelistFolder> = emptyList(),
+    private val onWhitelistChanged: (List<WhitelistFolder>) -> Unit = {},
 ) : FileSystemService {
-    private val _whitelist = kotlinx.coroutines.flow.MutableStateFlow<List<WhitelistFolder>>(emptyList())
+    private val _whitelist = kotlinx.coroutines.flow.MutableStateFlow(initialWhitelist)
 
     override val whitelist: StateFlow<List<WhitelistFolder>> = _whitelist
 
@@ -57,17 +59,17 @@ class InMemoryFileSystemService(
 
     override fun addWhitelistFolder(folder: WhitelistFolder) {
         val existing = _whitelist.value.filterNot { it.id == folder.id || samePath(it.path, folder.path) }
-        _whitelist.value = existing + folder
+        replaceWhitelist(existing + folder)
     }
 
     override fun removeWhitelistFolder(folderId: String) {
-        _whitelist.value = _whitelist.value.filterNot { it.id == folderId }
+        replaceWhitelist(_whitelist.value.filterNot { it.id == folderId })
     }
 
     override fun setWhitelistEnabled(folderId: String, enabled: Boolean) {
-        _whitelist.value = _whitelist.value.map { folder ->
+        replaceWhitelist(_whitelist.value.map { folder ->
             if (folder.id == folderId) folder.copy(enabled = enabled) else folder
-        }
+        })
     }
 
     override fun browseWhitelisted(path: String?): List<FileEntry> {
@@ -105,5 +107,10 @@ class InMemoryFileSystemService(
         val replaced = path.replace('\\', '/').trim()
         val withoutTrailingSlash = replaced.trimEnd('/')
         return withoutTrailingSlash.ifBlank { "/" }
+    }
+
+    private fun replaceWhitelist(folders: List<WhitelistFolder>) {
+        _whitelist.value = folders
+        onWhitelistChanged(folders)
     }
 }

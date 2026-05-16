@@ -3,18 +3,26 @@ package com.dimonoso.crosplatformfilesender.platform
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import java.io.File
+import java.net.InetAddress
 
-actual fun createPlatformServices(): PlatformServices =
-    PlatformServices(
+actual fun createPlatformServices(): PlatformServices {
+    val userName = System.getProperty("user.name", "user")
+    val hostName = runCatching { InetAddress.getLocalHost().hostName }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: "desktop"
+
+    return PlatformServices(
         deviceInfo = PlatformDeviceInfo(
-            id = "desktop-${System.getProperty("user.name", "user")}",
-            displayName = System.getProperty("user.name", "Desktop device"),
+            id = "desktop-$hostName-$userName",
+            displayName = "$userName@$hostName",
             platformName = "${System.getProperty("os.name", "Desktop")} ${System.getProperty("os.version", "")}".trim(),
             family = PlatformFamily.DesktopJvm,
         ),
         fileSystem = JvmPlatformFileSystem(),
         networkPermissions = JvmNetworkPermissionGateway(),
     )
+}
 
 private class JvmPlatformFileSystem : PlatformFileSystem {
     override val accessPolicy: FileSystemAccessPolicy = FileSystemAccessPolicy.FullFileSystem

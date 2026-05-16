@@ -29,18 +29,20 @@ internal actual fun discoveryCurrentTimeMillis(): Long = System.currentTimeMilli
 private class JavaUdpDiscoveryTransport(
     private val port: Int,
 ) : UdpDiscoveryTransport {
-    private val socket = DatagramSocket(null).apply {
+    private val receiveSocket = DatagramSocket(null).apply {
         reuseAddress = true
-        broadcast = true
         soTimeout = 1_000
-        bind(InetSocketAddress(port))
+        bind(InetSocketAddress(this@JavaUdpDiscoveryTransport.port))
+    }
+    private val sendSocket = DatagramSocket().apply {
+        broadcast = true
     }
 
     override suspend fun broadcast(payload: ByteArray) {
         withContext(Dispatchers.IO) {
             broadcastTargets().forEach { target ->
                 runCatching {
-                    socket.send(DatagramPacket(payload, payload.size, target))
+                    sendSocket.send(DatagramPacket(payload, payload.size, target))
                 }
             }
         }
@@ -51,20 +53,21 @@ private class JavaUdpDiscoveryTransport(
             val buffer = ByteArray(maxPayloadBytes)
             val packet = DatagramPacket(buffer, buffer.size)
             try {
-                socket.receive(packet)
+                receiveSocket.receive(packet)
                 UdpDiscoveryPacket(
                     payload = packet.data.copyOfRange(packet.offset, packet.offset + packet.length),
-                    remoteHost = packet.address.hostAddress,
+                    remoteHost = packet.address.hostAddress ?: packet.address.hostName,
                 )
             } catch (_: SocketTimeoutException) {
                 null
             } catch (exception: SocketException) {
-                if (socket.isClosed) null else throw exception
+                if (receiveSocket.isClosed) null else throw exception
             }
         }
 
     override fun close() {
-        socket.close()
+        receiveSocket.close()
+        sendSocket.close()
     }
 
     private fun broadcastTargets(): List<InetSocketAddress> {

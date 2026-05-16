@@ -1,6 +1,9 @@
 @file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package com.dimonoso.crosplatformfilesender
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,14 +15,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -29,6 +37,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +45,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,16 +59,17 @@ import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import com.dimonoso.crosplatformfilesender.platform.FileSystemAccessPolicy
+import com.dimonoso.crosplatformfilesender.settings.discoveryKeywordAllowedCharactersLabel
+import com.dimonoso.crosplatformfilesender.settings.isDiscoveryKeywordChar
+import com.dimonoso.crosplatformfilesender.settings.isValidDiscoveryKeyword
 import com.dimonoso.crosplatformfilesender.transfer.TransferEndpoint
 import com.dimonoso.crosplatformfilesender.transfer.TransferItem
 import com.dimonoso.crosplatformfilesender.transfer.TransferStatus
+import com.dimonoso.crosplatformfilesender.transfer.TransferTask
+import kotlin.math.roundToInt
 
 private enum class AppSection(val title: String) {
-    Devices("Пристрої"),
-    LocalFiles("Мої файли"),
-    Whitelist("Whitelist"),
-    RemoteBrowse("Віддалено"),
-    Queue("Черга"),
+    Workspace("Файли"),
     Settings("Налаштування"),
 }
 
@@ -64,7 +77,8 @@ private enum class AppSection(val title: String) {
 @Preview
 fun App() {
     val services = remember { createAppServices() }
-    var selectedSection by remember { mutableStateOf(AppSection.Devices) }
+    var selectedSection by remember { mutableStateOf(AppSection.Workspace) }
+    var showQueueDialog by remember { mutableStateOf(false) }
 
     MaterialTheme {
         Surface(
@@ -78,7 +92,10 @@ fun App() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                AppHeader(services)
+                AppHeader(
+                    services = services,
+                    onQueueClick = { showQueueDialog = true },
+                )
                 PrimaryTabRow(selectedTabIndex = selectedSection.ordinal) {
                     AppSection.entries.forEach { section ->
                         Tab(
@@ -101,21 +118,27 @@ fun App() {
                         .verticalScroll(rememberScrollState()),
                 ) {
                     when (selectedSection) {
-                        AppSection.Devices -> DevicesSection(services)
-                        AppSection.LocalFiles -> LocalFilesSection(services)
-                        AppSection.Whitelist -> WhitelistSection(services)
-                        AppSection.RemoteBrowse -> RemoteBrowseSection(services)
-                        AppSection.Queue -> QueueSection(services)
+                        AppSection.Workspace -> WorkspaceSection(services)
                         AppSection.Settings -> SettingsSection(services)
                     }
                 }
+            }
+
+            if (showQueueDialog) {
+                QueueDialog(
+                    services = services,
+                    onDismiss = { showQueueDialog = false },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun AppHeader(services: AppServices) {
+private fun AppHeader(
+    services: AppServices,
+    onQueueClick: () -> Unit,
+) {
     val networkState = remember(services) { services.platform.networkPermissions.currentState() }
     val accessLabel = when (services.platform.fileSystem.accessPolicy) {
         FileSystemAccessPolicy.FullFileSystem -> "Повний filesystem"
@@ -125,7 +148,7 @@ private fun AppHeader(services: AppServices) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -140,70 +163,119 @@ private fun AppHeader(services: AppServices) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            StatusPill(text = networkState.statusLabel)
+            QueueButton(
+                services = services,
+                onClick = onQueueClick,
+            )
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusPill(text = services.platform.deviceInfo.displayName)
             StatusPill(text = accessLabel)
-            StatusPill(text = "UDP LAN discovery")
-            StatusPill(text = "ZIP")
+            StatusPill(text = networkState.statusLabel)
+            StatusPill(text = "UDP LAN")
         }
     }
 }
 
 @Composable
-private fun DevicesSection(services: AppServices) {
+private fun QueueButton(
+    services: AppServices,
+    onClick: () -> Unit,
+) {
+    val tasks by services.transferQueue.tasks.collectAsState()
+    val progress = remember(tasks) { queueProgress(tasks) }
+    val label = progress?.let { "Черга ${(it * 100).roundToInt()}%" } ?: "Черга"
+
+    OutlinedButton(onClick = onClick) {
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun WorkspaceSection(services: AppServices) {
+    val settings by services.settings.settings.collectAsState()
     val devices by services.discovery.devices.collectAsState()
     val isRunning by services.discovery.isRunning.collectAsState()
     val configSummary by services.discovery.activeConfigSummary.collectAsState()
-    var keyword by remember { mutableStateOf("local-secret") }
+    val lastError by services.discovery.lastError.collectAsState()
 
-    SectionColumn(title = "Пошук пристроїв") {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = keyword,
-                onValueChange = { keyword = it },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text("Ключове слово") },
-            )
-            Button(
-                enabled = keyword.isNotBlank(),
-                onClick = {
+    SectionColumn(title = "Пристрої та файли") {
+        DiscoveryControls(
+            services = services,
+            keyword = settings.discoveryKeyword,
+            isRunning = isRunning,
+            configSummary = configSummary,
+            lastError = lastError,
+        )
+        HorizontalDivider()
+        DevicesPanel(devices)
+        HorizontalDivider()
+        LocalFilesPanel(services)
+        HorizontalDivider()
+        RemoteFilesPanel(services)
+    }
+}
+
+@Composable
+private fun DiscoveryControls(
+    services: AppServices,
+    keyword: String,
+    isRunning: Boolean,
+    configSummary: String?,
+    lastError: String?,
+) {
+    val canStart = isValidDiscoveryKeyword(keyword)
+
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Button(
+            enabled = isRunning || canStart,
+            onClick = {
+                if (isRunning) {
+                    services.discovery.stop()
+                } else {
                     services.discovery.start(
-                        services.platform.deviceInfo.toLocalDiscoveryConfig(keyword.trim()),
+                        services.platform.deviceInfo.toLocalDiscoveryConfig(keyword),
                     )
-                },
-            ) {
-                Text(if (isRunning) "Оновити" else "Старт")
-            }
-            OutlinedButton(onClick = services.discovery::stop, enabled = isRunning) {
-                Text("Стоп")
-            }
+                }
+            },
+        ) {
+            Text(if (isRunning) "Стоп" else "Старт")
         }
-        configSummary?.let { summary ->
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        StatusPill(text = if (isRunning) "Пошук активний" else "Пошук вимкнено")
+    }
+
+    lastError?.let { error ->
+        ErrorState(error)
+    } ?: configSummary?.let { summary ->
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun DevicesPanel(devices: List<DiscoveredDevice>) {
+    SectionColumn(title = "Знайдені пристрої") {
         if (devices.isEmpty()) {
             EmptyState("Немає знайдених пристроїв")
         } else {
             devices.forEach { device ->
-                DeviceRow(device)
+                DeviceDropZone(device)
             }
         }
     }
 }
 
 @Composable
-private fun LocalFilesSection(services: AppServices) {
+private fun LocalFilesPanel(services: AppServices) {
     val roots = remember(services) { services.fileSystem.localRoots() }
     var currentPath by remember { mutableStateOf<String?>(null) }
     val entries = currentPath?.let(services.fileSystem::browseLocal) ?: roots
@@ -234,10 +306,140 @@ private fun LocalFilesSection(services: AppServices) {
 }
 
 @Composable
-private fun WhitelistSection(services: AppServices) {
+private fun RemoteFilesPanel(services: AppServices) {
+    val devices by services.discovery.devices.collectAsState()
+    val whitelist by services.fileSystem.whitelist.collectAsState()
+    val selectedDevice = devices.firstOrNull()
+    val entries = selectedDevice?.let { services.fileSystem.browseRemote(it) }.orEmpty()
+
+    SectionColumn(title = "Віддалені файли") {
+        if (selectedDevice == null) {
+            EmptyState("Спершу запустіть пошук пристроїв")
+        } else {
+            DeviceRow(selectedDevice)
+            HorizontalDivider()
+            if (whitelist.none { it.enabled }) {
+                EmptyState("Немає активних whitelist папок")
+            } else if (entries.isEmpty()) {
+                EmptyState("Немає доступних віддалених файлів")
+            } else {
+                entries.forEach { entry ->
+                    FileEntryRow(entry = entry)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSection(services: AppServices) {
+    val settings by services.settings.settings.collectAsState()
     val roots = remember(services) { services.fileSystem.localRoots() }
     val whitelist by services.fileSystem.whitelist.collectAsState()
+    val networkState = remember(services) { services.platform.networkPermissions.currentState() }
+    val archiveFormats = remember(services) {
+        services.archive.supportedFormats.joinToString { format ->
+            when (format) {
+                ArchiveFormat.ZIP -> "ZIP"
+            }
+        }
+    }
 
+    var showKeyword by remember { mutableStateOf(false) }
+    var keywordDraft by remember { mutableStateOf(settings.discoveryKeyword) }
+
+    LaunchedEffect(settings.discoveryKeyword) {
+        keywordDraft = settings.discoveryKeyword
+    }
+
+    SectionColumn(title = "Налаштування") {
+        KeywordSettings(
+            keyword = settings.discoveryKeyword,
+            keywordDraft = keywordDraft,
+            showKeyword = showKeyword,
+            onShowKeywordChange = { showKeyword = it },
+            onKeywordDraftChange = { value ->
+                keywordDraft = value.filter(::isDiscoveryKeywordChar)
+            },
+            onSave = {
+                if (services.settings.updateDiscoveryKeyword(keywordDraft)) {
+                    showKeyword = false
+                }
+            },
+        )
+        HorizontalDivider()
+        WhitelistSettings(
+            roots = roots,
+            whitelist = whitelist,
+            services = services,
+        )
+        HorizontalDivider()
+        SettingRow(label = "Платформа", value = services.platform.deviceInfo.platformName)
+        SettingRow(label = "Пристрій", value = services.platform.deviceInfo.displayName)
+        SettingRow(label = "Device ID", value = settings.localDeviceId)
+        SettingRow(label = "Filesystem", value = services.platform.fileSystem.accessPolicy.name)
+        SettingRow(label = "Discovery", value = networkState.statusLabel)
+        SettingRow(label = "Архіви", value = archiveFormats)
+        SettingRow(label = "Persistence", value = "settings.config")
+    }
+}
+
+@Composable
+private fun KeywordSettings(
+    keyword: String,
+    keywordDraft: String,
+    showKeyword: Boolean,
+    onShowKeywordChange: (Boolean) -> Unit,
+    onKeywordDraftChange: (String) -> Unit,
+    onSave: () -> Unit,
+) {
+    val canSave = isValidDiscoveryKeyword(keywordDraft) && keywordDraft.trim() != keyword
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedTextField(
+            value = if (showKeyword) keywordDraft else "******",
+            onValueChange = {
+                if (showKeyword) onKeywordDraftChange(it)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            readOnly = !showKeyword,
+            singleLine = true,
+            isError = showKeyword && keywordDraft.isNotBlank() && !isValidDiscoveryKeyword(keywordDraft),
+            label = { Text("Ключове слово") },
+            trailingIcon = {
+                IconButton(onClick = { onShowKeywordChange(!showKeyword) }) {
+                    EyeIcon(visible = showKeyword)
+                }
+            },
+            supportingText = {
+                if (showKeyword) {
+                    Text("Дозволено: ${discoveryKeywordAllowedCharactersLabel()}")
+                }
+            },
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = showKeyword && canSave,
+                onClick = onSave,
+            ) {
+                Text("Зберегти")
+            }
+            OutlinedButton(
+                enabled = showKeyword && keywordDraft != keyword,
+                onClick = { onKeywordDraftChange(keyword) },
+            ) {
+                Text("Скасувати")
+            }
+        }
+    }
+}
+
+@Composable
+private fun WhitelistSettings(
+    roots: List<FileEntry>,
+    whitelist: List<WhitelistFolder>,
+    services: AppServices,
+) {
     SectionColumn(title = "Whitelist папок і дисків") {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             roots.forEach { root ->
@@ -256,7 +458,6 @@ private fun WhitelistSection(services: AppServices) {
                 }
             }
         }
-        HorizontalDivider()
         if (whitelist.isEmpty()) {
             EmptyState("Whitelist порожній")
         } else {
@@ -272,105 +473,93 @@ private fun WhitelistSection(services: AppServices) {
 }
 
 @Composable
-private fun RemoteBrowseSection(services: AppServices) {
-    val devices by services.discovery.devices.collectAsState()
-    val whitelist by services.fileSystem.whitelist.collectAsState()
-    val selectedDevice = devices.firstOrNull()
-    val entries = selectedDevice?.let { services.fileSystem.browseRemote(it) }.orEmpty()
+private fun QueueDialog(
+    services: AppServices,
+    onDismiss: () -> Unit,
+) {
+    val tasks by services.transferQueue.tasks.collectAsState()
+    val progress = remember(tasks) { queueProgress(tasks) }
 
-    SectionColumn(title = "Віддалений перегляд") {
-        if (selectedDevice == null) {
-            EmptyState("Спершу запустіть пошук пристроїв")
-        } else {
-            DeviceRow(selectedDevice)
-            HorizontalDivider()
-            if (whitelist.none { it.enabled }) {
-                EmptyState("Немає активних whitelist папок")
-            } else {
-                entries.forEach { entry ->
-                    FileEntryRow(entry = entry)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Черга передач") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                progress?.let {
+                    LinearProgressIndicator(
+                        progress = { it },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                QueueActions(services)
+                if (tasks.isEmpty()) {
+                    EmptyState("Черга порожня")
+                } else {
+                    tasks.forEach { task ->
+                        TaskRow(
+                            taskId = task.id,
+                            title = task.item.displayName,
+                            status = task.status,
+                            subtitle = "${task.direction}: ${task.source.displayName} -> ${task.target.displayName}",
+                            onPause = { services.transferQueue.pause(task.id) },
+                            onResume = { services.transferQueue.resume(task.id) },
+                            onCancel = { services.transferQueue.cancel(task.id) },
+                        )
+                    }
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрити")
+            }
+        },
+    )
 }
 
 @Composable
-private fun QueueSection(services: AppServices) {
+private fun QueueActions(services: AppServices) {
     val devices by services.discovery.devices.collectAsState()
-    val tasks by services.transferQueue.tasks.collectAsState()
     val target = devices.firstOrNull()?.let { TransferEndpoint(it.id, it.displayName) }
         ?: TransferEndpoint("manual-peer", "Manual peer")
 
-    SectionColumn(title = "Черга передач") {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    services.transferQueue.enqueueUpload(
-                        item = TransferItem(
-                            path = "/local/demo-file.zip",
-                            displayName = "demo-file.zip",
-                            isDirectory = false,
-                            sizeBytes = 25_000_000,
-                        ),
-                        target = target,
-                    )
-                },
-            ) {
-                Text("Додати відправку")
-            }
-            OutlinedButton(
-                onClick = {
-                    services.transferQueue.enqueueDownload(
-                        item = TransferItem(
-                            path = "/remote/photos",
-                            displayName = "photos",
-                            isDirectory = true,
-                        ),
-                        source = target,
-                        destinationPath = "/downloads",
-                    )
-                },
-            ) {
-                Text("Запитати отримання")
-            }
-        }
-        if (tasks.isEmpty()) {
-            EmptyState("Черга порожня")
-        } else {
-            tasks.forEach { task ->
-                TaskRow(
-                    taskId = task.id,
-                    title = task.item.displayName,
-                    status = task.status,
-                    subtitle = "${task.direction}: ${task.source.displayName} -> ${task.target.displayName}",
-                    onPause = { services.transferQueue.pause(task.id) },
-                    onResume = { services.transferQueue.resume(task.id) },
-                    onCancel = { services.transferQueue.cancel(task.id) },
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = {
+                services.transferQueue.enqueueUpload(
+                    item = TransferItem(
+                        path = "/local/demo-file.zip",
+                        displayName = "demo-file.zip",
+                        isDirectory = false,
+                        sizeBytes = 25_000_000,
+                    ),
+                    target = target,
                 )
-            }
+            },
+        ) {
+            Text("Додати відправку")
         }
-    }
-}
-
-@Composable
-private fun SettingsSection(services: AppServices) {
-    val networkState = remember(services) { services.platform.networkPermissions.currentState() }
-    val archiveFormats = remember(services) {
-        services.archive.supportedFormats.joinToString { format ->
-            when (format) {
-                ArchiveFormat.ZIP -> "ZIP"
-            }
+        OutlinedButton(
+            onClick = {
+                services.transferQueue.enqueueDownload(
+                    item = TransferItem(
+                        path = "/remote/photos",
+                        displayName = "photos",
+                        isDirectory = true,
+                    ),
+                    source = target,
+                    destinationPath = "/downloads",
+                )
+            },
+        ) {
+            Text("Запитати отримання")
         }
-    }
-
-    SectionColumn(title = "Налаштування каркаса") {
-        SettingRow(label = "Платформа", value = services.platform.deviceInfo.platformName)
-        SettingRow(label = "Пристрій", value = services.platform.deviceInfo.displayName)
-        SettingRow(label = "Filesystem", value = services.platform.fileSystem.accessPolicy.name)
-        SettingRow(label = "Discovery", value = networkState.statusLabel)
-        SettingRow(label = "Архіви", value = archiveFormats)
-        SettingRow(label = "Persistence черги", value = "In-memory")
     }
 }
 
@@ -390,6 +579,36 @@ private fun SectionColumn(
         )
         content()
         Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun DeviceDropZone(device: DiscoveredDevice) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(device.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    text = "${device.platformName} | ${device.host}:${device.port}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            StatusPill(text = "Drop")
+        }
     }
 }
 
@@ -562,4 +781,69 @@ private fun EmptyState(text: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+@Composable
+private fun ErrorState(text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun EyeIcon(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val strokeWidth = 1.8.dp.toPx()
+        val path = Path().apply {
+            moveTo(size.width * 0.08f, size.height * 0.50f)
+            quadraticTo(size.width * 0.30f, size.height * 0.12f, size.width * 0.50f, size.height * 0.12f)
+            quadraticTo(size.width * 0.70f, size.height * 0.12f, size.width * 0.92f, size.height * 0.50f)
+            quadraticTo(size.width * 0.70f, size.height * 0.88f, size.width * 0.50f, size.height * 0.88f)
+            quadraticTo(size.width * 0.30f, size.height * 0.88f, size.width * 0.08f, size.height * 0.50f)
+            close()
+        }
+        drawPath(path, color = color, style = Stroke(width = strokeWidth))
+        drawCircle(color = color, radius = size.minDimension * 0.13f, center = center)
+        if (!visible) {
+            drawLine(
+                color = color,
+                start = Offset(size.width * 0.18f, size.height * 0.86f),
+                end = Offset(size.width * 0.84f, size.height * 0.16f),
+                strokeWidth = strokeWidth,
+            )
+        }
+    }
+}
+
+private fun queueProgress(tasks: List<TransferTask>): Float? {
+    val activeTasks = tasks.filter { task ->
+        task.status != TransferStatus.Completed && task.status != TransferStatus.Cancelled
+    }
+    if (activeTasks.isEmpty()) return null
+
+    return activeTasks
+        .map { task ->
+            val total = task.totalBytes
+            if (total == null || total <= 0L) {
+                0f
+            } else {
+                (task.progressBytes.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            }
+        }
+        .average()
+        .toFloat()
 }

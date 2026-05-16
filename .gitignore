@@ -31,19 +31,6 @@ out/
 *.keystore
 *.jks
 
-# Xcode / Apple tooling
-DerivedData/
-*.xcuserstate
-**/xcuserdata/
-**/*.xcodeproj/*
-!**/*.xcodeproj/project.pbxproj
-!**/*.xcodeproj/project.xcworkspace/
-!**/*.xcodeproj/project.xcworkspace/contents.xcworkspacedata
-!**/*.xcodeproj/xcshareddata/
-!**/*.xcodeproj/xcshareddata/**
-**/*.xcworkspace/xcuserdata/
-**/xcshareddata/WorkspaceSettings.xcsettings
-
 # OS files
 .DS_Store
 Thumbs.db

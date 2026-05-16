@@ -1,0 +1,109 @@
+package com.dimonoso.crosplatformfilesender.filesystem
+
+import com.dimonoso.crosplatformfilesender.discovery.DiscoveredDevice
+import com.dimonoso.crosplatformfilesender.platform.PlatformFileSystem
+import kotlinx.coroutines.flow.StateFlow
+
+enum class FileEntryType {
+    Drive,
+    Directory,
+    File,
+    Unknown,
+}
+
+data class FileEntry(
+    val path: String,
+    val name: String,
+    val type: FileEntryType,
+    val sizeBytes: Long? = null,
+    val isBrowseable: Boolean = type == FileEntryType.Drive || type == FileEntryType.Directory,
+)
+
+data class WhitelistFolder(
+    val id: String,
+    val displayName: String,
+    val path: String,
+    val enabled: Boolean = true,
+)
+
+interface FileSystemService {
+    val whitelist: StateFlow<List<WhitelistFolder>>
+
+    fun localRoots(): List<FileEntry>
+
+    fun browseLocal(path: String): List<FileEntry>
+
+    fun addWhitelistFolder(folder: WhitelistFolder)
+
+    fun removeWhitelistFolder(folderId: String)
+
+    fun setWhitelistEnabled(folderId: String, enabled: Boolean)
+
+    fun browseWhitelisted(path: String? = null): List<FileEntry>
+
+    fun browseRemote(device: DiscoveredDevice, path: String? = null): List<FileEntry>
+}
+
+class InMemoryFileSystemService(
+    private val platformFileSystem: PlatformFileSystem,
+) : FileSystemService {
+    private val _whitelist = kotlinx.coroutines.flow.MutableStateFlow<List<WhitelistFolder>>(emptyList())
+
+    override val whitelist: StateFlow<List<WhitelistFolder>> = _whitelist
+
+    override fun localRoots(): List<FileEntry> = platformFileSystem.roots()
+
+    override fun browseLocal(path: String): List<FileEntry> = platformFileSystem.list(path)
+
+    override fun addWhitelistFolder(folder: WhitelistFolder) {
+        val existing = _whitelist.value.filterNot { it.id == folder.id || samePath(it.path, folder.path) }
+        _whitelist.value = existing + folder
+    }
+
+    override fun removeWhitelistFolder(folderId: String) {
+        _whitelist.value = _whitelist.value.filterNot { it.id == folderId }
+    }
+
+    override fun setWhitelistEnabled(folderId: String, enabled: Boolean) {
+        _whitelist.value = _whitelist.value.map { folder ->
+            if (folder.id == folderId) folder.copy(enabled = enabled) else folder
+        }
+    }
+
+    override fun browseWhitelisted(path: String?): List<FileEntry> {
+        val enabledFolders = _whitelist.value.filter { it.enabled }
+        if (path == null) {
+            return enabledFolders.map { folder ->
+                FileEntry(
+                    path = folder.path,
+                    name = folder.displayName,
+                    type = FileEntryType.Directory,
+                )
+            }
+        }
+
+        if (enabledFolders.none { isInside(path, it.path) }) {
+            return emptyList()
+        }
+
+        return platformFileSystem.list(path)
+            .filter { entry -> enabledFolders.any { folder -> isInside(entry.path, folder.path) } }
+    }
+
+    override fun browseRemote(device: DiscoveredDevice, path: String?): List<FileEntry> = browseWhitelisted(path)
+
+    private fun samePath(left: String, right: String): Boolean =
+        normalizePath(left).equals(normalizePath(right), ignoreCase = true)
+
+    private fun isInside(path: String, root: String): Boolean {
+        val normalizedPath = normalizePath(path)
+        val normalizedRoot = normalizePath(root)
+        return normalizedPath == normalizedRoot || normalizedPath.startsWith("$normalizedRoot/")
+    }
+
+    private fun normalizePath(path: String): String {
+        val replaced = path.replace('\\', '/').trim()
+        val withoutTrailingSlash = replaced.trimEnd('/')
+        return withoutTrailingSlash.ifBlank { "/" }
+    }
+}

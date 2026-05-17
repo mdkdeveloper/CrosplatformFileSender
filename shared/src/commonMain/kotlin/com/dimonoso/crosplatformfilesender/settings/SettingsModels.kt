@@ -6,14 +6,31 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlin.random.Random
 
 const val DefaultDiscoveryKeyword = "local-secret"
+const val DefaultMaxParallelTransfers = 1
 
 private val AllowedDiscoveryKeywordSymbols = setOf('_', '-', '.', ',', '"', '&', '$')
+
+enum class BackupMode(
+    val configValue: String,
+) {
+    DoNotBackup("none"),
+    BackupOnlyFile("file"),
+    BackupFolder("folder");
+
+    companion object {
+        fun fromConfigValue(value: String?): BackupMode =
+            entries.firstOrNull { it.configValue == value } ?: BackupFolder
+    }
+}
 
 data class AppSettings(
     val localDeviceId: String = createLocalDeviceId(),
     val discoveryKeyword: String = DefaultDiscoveryKeyword,
     val whitelistFolders: List<WhitelistFolder> = emptyList(),
     val languageMode: AppLanguageMode = AppLanguageMode.System,
+    val maxOutgoingTransfers: Int = DefaultMaxParallelTransfers,
+    val maxIncomingTransfers: Int = DefaultMaxParallelTransfers,
+    val backupMode: BackupMode = BackupMode.BackupFolder,
 )
 
 interface SettingsService {
@@ -24,6 +41,12 @@ interface SettingsService {
     fun updateWhitelistFolders(folders: List<WhitelistFolder>)
 
     fun updateLanguageMode(mode: AppLanguageMode)
+
+    fun updateMaxOutgoingTransfers(value: Int)
+
+    fun updateMaxIncomingTransfers(value: Int)
+
+    fun updateBackupMode(mode: BackupMode)
 }
 
 fun isDiscoveryKeywordChar(char: Char): Boolean =
@@ -62,6 +85,18 @@ internal class PersistentSettingsService(
         replace(_settings.value.copy(languageMode = mode))
     }
 
+    override fun updateMaxOutgoingTransfers(value: Int) {
+        replace(_settings.value.copy(maxOutgoingTransfers = value.normalizeTransferLimit()))
+    }
+
+    override fun updateMaxIncomingTransfers(value: Int) {
+        replace(_settings.value.copy(maxIncomingTransfers = value.normalizeTransferLimit()))
+    }
+
+    override fun updateBackupMode(mode: BackupMode) {
+        replace(_settings.value.copy(backupMode = mode))
+    }
+
     private fun loadSettings(): AppSettings {
         val stored = store.readConfig()
             ?.let(SettingsConfigCodec::decode)
@@ -70,6 +105,8 @@ internal class PersistentSettingsService(
         return stored.copy(
             localDeviceId = stored.localDeviceId.takeIf { it.isNotBlank() } ?: createLocalDeviceId(),
             discoveryKeyword = stored.discoveryKeyword.takeIf(::isValidDiscoveryKeyword) ?: DefaultDiscoveryKeyword,
+            maxOutgoingTransfers = stored.maxOutgoingTransfers.normalizeTransferLimit(),
+            maxIncomingTransfers = stored.maxIncomingTransfers.normalizeTransferLimit(),
         )
     }
 
@@ -84,6 +121,8 @@ internal class PersistentSettingsService(
         }
     }
 }
+
+internal fun Int.normalizeTransferLimit(): Int = coerceIn(1, 16)
 
 internal interface SettingsStore {
     fun readConfig(): String?

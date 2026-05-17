@@ -82,6 +82,39 @@ class SettingsConfigCodecTest {
     }
 
     @Test
+    fun transferSettingsRoundTripKeepsConcurrencyAndBackupMode() {
+        val settings = AppSettings(
+            localDeviceId = "device-transfer-test",
+            discoveryKeyword = "local-secret",
+            maxOutgoingTransfers = 3,
+            maxIncomingTransfers = 4,
+            backupMode = BackupMode.BackupOnlyFile,
+        )
+
+        val decoded = SettingsConfigCodec.decode(SettingsConfigCodec.encode(settings))
+
+        assertEquals(3, decoded.maxOutgoingTransfers)
+        assertEquals(4, decoded.maxIncomingTransfers)
+        assertEquals(BackupMode.BackupOnlyFile, decoded.backupMode)
+    }
+
+    @Test
+    fun transferSettingsFallbackToSafeDefaultsWhenMissingOrInvalid() {
+        val decoded = SettingsConfigCodec.decode(
+            """
+            discovery.keyword=local-secret
+            transfer.maxOutgoing=0
+            transfer.maxIncoming=100
+            backup.mode=unknown
+            """.trimIndent(),
+        )
+
+        assertEquals(1, decoded.maxOutgoingTransfers)
+        assertEquals(16, decoded.maxIncomingTransfers)
+        assertEquals(BackupMode.BackupFolder, decoded.backupMode)
+    }
+
+    @Test
     fun systemLanguageResolverUsesUkrainianOnlyForUkCodes() {
         assertEquals(AppLanguage.Ukrainian, languageFromSystemCode("uk"))
         assertEquals(AppLanguage.Ukrainian, languageFromSystemCode("uk-UA"))

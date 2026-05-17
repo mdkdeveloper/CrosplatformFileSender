@@ -7,6 +7,9 @@ internal object SettingsConfigCodec {
     private const val KeywordKey = "discovery.keyword"
     private const val WhitelistCountKey = "whitelist.count"
     private const val LanguageKey = "ui.language"
+    private const val MaxOutgoingTransfersKey = "transfer.maxOutgoing"
+    private const val MaxIncomingTransfersKey = "transfer.maxIncoming"
+    private const val BackupModeKey = "backup.mode"
 
     fun encode(settings: AppSettings): String =
         buildString {
@@ -14,6 +17,9 @@ internal object SettingsConfigCodec {
             appendLine("$DeviceIdKey=${settings.localDeviceId.escapeConfigValue()}")
             appendLine("$KeywordKey=${settings.discoveryKeyword.escapeConfigValue()}")
             appendLine("$LanguageKey=${settings.languageMode.configValue}")
+            appendLine("$MaxOutgoingTransfersKey=${settings.maxOutgoingTransfers.normalizeTransferLimit()}")
+            appendLine("$MaxIncomingTransfersKey=${settings.maxIncomingTransfers.normalizeTransferLimit()}")
+            appendLine("$BackupModeKey=${settings.backupMode.configValue}")
             appendLine("$WhitelistCountKey=${settings.whitelistFolders.size}")
             settings.whitelistFolders.forEachIndexed { index, folder ->
                 appendLine("whitelist.$index.id=${folder.id.escapeConfigValue()}")
@@ -43,6 +49,15 @@ internal object SettingsConfigCodec {
             ?: DefaultDiscoveryKeyword
         val localDeviceId = properties[DeviceIdKey]?.takeIf { it.isNotBlank() } ?: AppSettings().localDeviceId
         val languageMode = AppLanguageMode.fromConfigValue(properties[LanguageKey])
+        val maxOutgoingTransfers = properties[MaxOutgoingTransfersKey]
+            ?.toIntOrNull()
+            ?.normalizeTransferLimit()
+            ?: DefaultMaxParallelTransfers
+        val maxIncomingTransfers = properties[MaxIncomingTransfersKey]
+            ?.toIntOrNull()
+            ?.normalizeTransferLimit()
+            ?: DefaultMaxParallelTransfers
+        val backupMode = BackupMode.fromConfigValue(properties[BackupModeKey])
         val whitelistCount = properties[WhitelistCountKey]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val folders = (0 until whitelistCount).mapNotNull { index ->
             val prefix = "whitelist.$index"
@@ -60,6 +75,9 @@ internal object SettingsConfigCodec {
             discoveryKeyword = keyword,
             whitelistFolders = folders,
             languageMode = languageMode,
+            maxOutgoingTransfers = maxOutgoingTransfers,
+            maxIncomingTransfers = maxIncomingTransfers,
+            backupMode = backupMode,
         )
     }
 }

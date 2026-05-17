@@ -26,6 +26,16 @@ data class WhitelistFolder(
     val enabled: Boolean = true,
 )
 
+sealed interface WhitelistedBrowseResult {
+    data class Success(
+        val entries: List<FileEntry>,
+    ) : WhitelistedBrowseResult
+
+    data class Failure(
+        val message: String,
+    ) : WhitelistedBrowseResult
+}
+
 interface FileSystemService {
     val whitelist: StateFlow<List<WhitelistFolder>>
 
@@ -40,6 +50,8 @@ interface FileSystemService {
     fun setWhitelistEnabled(folderId: String, enabled: Boolean)
 
     fun browseWhitelisted(path: String? = null): List<FileEntry>
+
+    fun browseWhitelistedResult(path: String? = null): WhitelistedBrowseResult
 
     fun browseRemote(device: DiscoveredDevice, path: String? = null): List<FileEntry>
 }
@@ -72,24 +84,34 @@ class InMemoryFileSystemService(
         })
     }
 
-    override fun browseWhitelisted(path: String?): List<FileEntry> {
+    override fun browseWhitelisted(path: String?): List<FileEntry> =
+        when (val result = browseWhitelistedResult(path)) {
+            is WhitelistedBrowseResult.Success -> result.entries
+            is WhitelistedBrowseResult.Failure -> emptyList()
+        }
+
+    override fun browseWhitelistedResult(path: String?): WhitelistedBrowseResult {
         val enabledFolders = _whitelist.value.filter { it.enabled }
         if (path == null) {
-            return enabledFolders.map { folder ->
-                FileEntry(
-                    path = folder.path,
-                    name = folder.displayName,
-                    type = FileEntryType.Directory,
-                )
-            }
+            return WhitelistedBrowseResult.Success(
+                enabledFolders.map { folder ->
+                    FileEntry(
+                        path = folder.path,
+                        name = folder.displayName,
+                        type = FileEntryType.Directory,
+                    )
+                },
+            )
         }
 
         if (enabledFolders.none { isInside(path, it.path) }) {
-            return emptyList()
+            return WhitelistedBrowseResult.Failure("Requested path is outside the whitelist.")
         }
 
-        return platformFileSystem.list(path)
-            .filter { entry -> enabledFolders.any { folder -> isInside(entry.path, folder.path) } }
+        return WhitelistedBrowseResult.Success(
+            platformFileSystem.list(path)
+                .filter { entry -> enabledFolders.any { folder -> isInside(entry.path, folder.path) } },
+        )
     }
 
     override fun browseRemote(device: DiscoveredDevice, path: String?): List<FileEntry> = browseWhitelisted(path)

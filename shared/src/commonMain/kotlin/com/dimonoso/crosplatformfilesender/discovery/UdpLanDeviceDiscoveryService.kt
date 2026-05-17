@@ -66,6 +66,7 @@ internal class UdpLanDeviceDiscoveryService(
             displayName = config.deviceAlias,
             platformName = deviceInfo.platformName,
             port = config.udpPort,
+            transferPort = (config.udpPort + 1).coerceAtMost(65535),
             keywordFingerprint = keywordFingerprint,
         )
         val payload = DiscoveryMessageCodec.encode(announcement)
@@ -165,6 +166,7 @@ internal class UdpLanDeviceDiscoveryService(
             platformName = announcement.platformName,
             host = packet.remoteHost,
             port = announcement.port,
+            transferPort = announcement.transferPort,
             lastSeenEpochMillis = now,
             protocol = config.protocol,
         )

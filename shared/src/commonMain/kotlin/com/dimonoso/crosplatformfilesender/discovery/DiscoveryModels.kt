@@ -38,6 +38,7 @@ data class DiscoveredDevice(
     val platformName: String,
     val host: String,
     val port: Int,
+    val transferPort: Int = port + 1,
     val lastSeenEpochMillis: Long,
     val protocol: DiscoveryProtocol = DiscoveryProtocol.UdpLan,
 )

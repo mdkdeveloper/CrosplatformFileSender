@@ -1,7 +1,10 @@
 package com.dimonoso.crosplatformfilesender
 
 import com.dimonoso.crosplatformfilesender.archive.ArchiveService
-import com.dimonoso.crosplatformfilesender.archive.StubArchiveService
+import com.dimonoso.crosplatformfilesender.archive.createArchiveService
+import com.dimonoso.crosplatformfilesender.backup.BackupService
+import com.dimonoso.crosplatformfilesender.backup.PersistentBackupService
+import com.dimonoso.crosplatformfilesender.backup.createBackupStore
 import com.dimonoso.crosplatformfilesender.discovery.DeviceDiscoveryService
 import com.dimonoso.crosplatformfilesender.discovery.createDeviceDiscoveryService
 import com.dimonoso.crosplatformfilesender.filesystem.FileSystemService
@@ -10,9 +13,11 @@ import com.dimonoso.crosplatformfilesender.platform.PlatformServices
 import com.dimonoso.crosplatformfilesender.platform.PlatformFolderPicker
 import com.dimonoso.crosplatformfilesender.platform.createPlatformFolderPicker
 import com.dimonoso.crosplatformfilesender.platform.createPlatformServices
+import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogService
+import com.dimonoso.crosplatformfilesender.remote.createRemoteFileCatalogService
 import com.dimonoso.crosplatformfilesender.settings.SettingsService
 import com.dimonoso.crosplatformfilesender.settings.createSettingsService
-import com.dimonoso.crosplatformfilesender.transfer.InMemoryTransferQueueService
+import com.dimonoso.crosplatformfilesender.transfer.NetworkTransferQueueService
 import com.dimonoso.crosplatformfilesender.transfer.TransferEndpoint
 import com.dimonoso.crosplatformfilesender.transfer.TransferQueueService
 
@@ -22,8 +27,10 @@ data class AppServices(
     val settings: SettingsService,
     val discovery: DeviceDiscoveryService,
     val fileSystem: FileSystemService,
+    val remoteFileCatalog: RemoteFileCatalogService,
     val transferQueue: TransferQueueService,
     val archive: ArchiveService,
+    val backups: BackupService,
 )
 
 fun createAppServices(): AppServices {
@@ -39,6 +46,19 @@ fun createAppServices(): AppServices {
         displayName = platform.deviceInfo.displayName,
     )
 
+    val fileSystem = InMemoryFileSystemService(
+        platformFileSystem = platform.fileSystem,
+        initialWhitelist = settings.settings.value.whitelistFolders,
+        onWhitelistChanged = settings::updateWhitelistFolders,
+    )
+    val archive = createArchiveService(platform.fileSystem)
+    val backups = PersistentBackupService(
+        fileSystem = platform.fileSystem,
+        archiveService = archive,
+        store = createBackupStore(),
+        timeProvider = ::currentTimeMillis,
+    )
+
     return AppServices(
         platform = platform,
         folderPicker = createPlatformFolderPicker(),
@@ -47,12 +67,21 @@ fun createAppServices(): AppServices {
             deviceInfo = platform.deviceInfo,
             networkPermissionGateway = platform.networkPermissions,
         ),
-        fileSystem = InMemoryFileSystemService(
-            platformFileSystem = platform.fileSystem,
-            initialWhitelist = settings.settings.value.whitelistFolders,
-            onWhitelistChanged = settings::updateWhitelistFolders,
+        fileSystem = fileSystem,
+        remoteFileCatalog = createRemoteFileCatalogService(
+            fileSystem = fileSystem,
+            keywordProvider = { settings.settings.value.discoveryKeyword },
         ),
-        transferQueue = InMemoryTransferQueueService(localEndpoint),
-        archive = StubArchiveService(),
+        transferQueue = NetworkTransferQueueService(
+            localEndpoint = localEndpoint,
+            platformFileSystem = platform.fileSystem,
+            archiveService = archive,
+            backupService = backups,
+            settingsService = settings,
+            keywordProvider = { settings.settings.value.discoveryKeyword },
+            timeProvider = ::currentTimeMillis,
+        ),
+        archive = archive,
+        backups = backups,
     )
 }

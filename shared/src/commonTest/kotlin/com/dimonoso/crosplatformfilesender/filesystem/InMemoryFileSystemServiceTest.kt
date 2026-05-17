@@ -5,6 +5,7 @@ import com.dimonoso.crosplatformfilesender.platform.FileSystemAccessPolicy
 import com.dimonoso.crosplatformfilesender.platform.PlatformFileSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class InMemoryFileSystemServiceTest {
@@ -50,6 +51,31 @@ class InMemoryFileSystemServiceTest {
         service.setWhitelistEnabled("shared", enabled = false)
 
         assertTrue(service.browseRemote(peer).isEmpty())
+    }
+
+    @Test
+    fun whitelistedBrowseResultFailsForPathsOutsideWhitelist() {
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = emptyList(),
+                listings = mapOf(
+                    "/shared" to listOf(
+                        FileEntry(path = "/shared/a.txt", name = "a.txt", type = FileEntryType.File),
+                    ),
+                ),
+            ),
+        )
+
+        service.addWhitelistFolder(
+            WhitelistFolder(
+                id = "shared",
+                displayName = "Shared",
+                path = "/shared",
+            ),
+        )
+
+        assertIs<WhitelistedBrowseResult.Success>(service.browseWhitelistedResult("/shared"))
+        assertIs<WhitelistedBrowseResult.Failure>(service.browseWhitelistedResult("/private"))
     }
 }
 

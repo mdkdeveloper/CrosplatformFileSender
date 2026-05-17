@@ -8,6 +8,7 @@ internal data class DiscoveryAnnouncement(
     val displayName: String,
     val platformName: String,
     val port: Int,
+    val transferPort: Int = port + 1,
     val keywordFingerprint: String,
 )
 
@@ -20,6 +21,7 @@ internal object DiscoveryMessageCodec {
             appendLine("displayName=${announcement.displayName.escapeWireValue()}")
             appendLine("platformName=${announcement.platformName.escapeWireValue()}")
             appendLine("port=${announcement.port}")
+            appendLine("transferPort=${announcement.transferPort}")
             appendLine("keywordFingerprint=${announcement.keywordFingerprint.escapeWireValue()}")
         }.encodeToByteArray()
 
@@ -43,12 +45,14 @@ internal object DiscoveryMessageCodec {
 
         if (fields["type"] != "announce") return null
         val port = fields["port"]?.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+        val transferPort = fields["transferPort"]?.toIntOrNull()?.takeIf { it in 1..65535 } ?: (port + 1).coerceAtMost(65535)
 
         return DiscoveryAnnouncement(
             deviceId = fields["deviceId"]?.takeIf { it.isNotBlank() } ?: return null,
             displayName = fields["displayName"]?.takeIf { it.isNotBlank() } ?: return null,
             platformName = fields["platformName"]?.takeIf { it.isNotBlank() } ?: return null,
             port = port,
+            transferPort = transferPort,
             keywordFingerprint = fields["keywordFingerprint"]?.takeIf { it.isNotBlank() } ?: return null,
         )
     }

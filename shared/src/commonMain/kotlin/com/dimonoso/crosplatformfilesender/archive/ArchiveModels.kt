@@ -1,5 +1,7 @@
 package com.dimonoso.crosplatformfilesender.archive
 
+import com.dimonoso.crosplatformfilesender.platform.PlatformFileSystem
+
 enum class ArchiveFormat {
     ZIP,
 }
@@ -8,6 +10,7 @@ data class CreateArchiveRequest(
     val sourcePaths: List<String>,
     val destinationArchivePath: String,
     val format: ArchiveFormat = ArchiveFormat.ZIP,
+    val baseDirectoryPath: String? = null,
 )
 
 data class ExtractArchiveRequest(
@@ -18,6 +21,11 @@ data class ExtractArchiveRequest(
 
 sealed interface ArchiveOperationResult {
     data class Success(val outputPath: String) : ArchiveOperationResult
+
+    data class Failure(
+        val format: ArchiveFormat,
+        val message: String,
+    ) : ArchiveOperationResult
 
     data class NotImplementedYet(
         val format: ArchiveFormat,
@@ -48,3 +56,5 @@ class StubArchiveService : ArchiveService {
             message = "ZIP archive extraction is scaffolded only.",
         )
 }
+
+expect fun createArchiveService(platformFileSystem: PlatformFileSystem): ArchiveService

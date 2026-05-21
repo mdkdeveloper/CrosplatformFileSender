@@ -19,6 +19,7 @@ class SettingsConfigCodecTest {
     fun settingsRoundTripKeepsKeywordAndWhitelist() {
         val settings = AppSettings(
             localDeviceId = "device-test-id",
+            deviceDisplayName = "Living room PC",
             discoveryKeyword = "key_123-&$",
             languageMode = AppLanguageMode.Ukrainian,
             whitelistFolders = listOf(
@@ -41,6 +42,18 @@ class SettingsConfigCodecTest {
         val decoded = SettingsConfigCodec.decode("discovery.keyword=local-secret")
 
         assertTrue(decoded.localDeviceId.isNotBlank())
+    }
+
+    @Test
+    fun settingsDecodeKeepsDeviceDisplayNameWhenPresent() {
+        val decoded = SettingsConfigCodec.decode(
+            """
+            device.name=Desk PC
+            discovery.keyword=local-secret
+            """.trimIndent(),
+        )
+
+        assertEquals("Desk PC", decoded.deviceDisplayName)
     }
 
     @Test
@@ -175,6 +188,17 @@ class SettingsConfigCodecTest {
 
         val decoded = SettingsConfigCodec.decode(store.contents.orEmpty())
         assertEquals(AppLanguageMode.English, decoded.languageMode)
+    }
+
+    @Test
+    fun settingsServicePersistsDeviceDisplayNameChanges() {
+        val store = InMemorySettingsStore(null)
+        val service = PersistentSettingsService(store)
+
+        assertTrue(service.updateDeviceDisplayName("Desk PC"))
+
+        val decoded = SettingsConfigCodec.decode(store.contents.orEmpty())
+        assertEquals("Desk PC", decoded.deviceDisplayName)
     }
 }
 

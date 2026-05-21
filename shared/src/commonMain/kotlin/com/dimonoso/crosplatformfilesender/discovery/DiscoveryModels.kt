@@ -66,10 +66,13 @@ interface DeviceDiscoveryService {
     fun stop()
 }
 
-fun PlatformDeviceInfo.toLocalDiscoveryConfig(keyword: String): DiscoveryConfig =
+fun PlatformDeviceInfo.toLocalDiscoveryConfig(
+    keyword: String,
+    deviceAlias: String = displayName,
+): DiscoveryConfig =
     DiscoveryConfig(
         keyword = keyword,
-        deviceAlias = displayName,
+        deviceAlias = deviceAlias.ifBlank { displayName },
     )
 
 expect fun createDeviceDiscoveryService(

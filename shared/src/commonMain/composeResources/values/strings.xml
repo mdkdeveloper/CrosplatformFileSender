@@ -42,6 +42,7 @@
     <string name="discovery">Discovery</string>
     <string name="archives">Archives</string>
     <string name="persistence">Persistence</string>
+    <string name="device_name">Device name</string>
     <string name="keyword">Keyword</string>
     <string name="keyword_allowed_template">Allowed: %1$s</string>
     <string name="keyword_allowed_characters">letters, digits, _ - . , &quot; &amp; $</string>

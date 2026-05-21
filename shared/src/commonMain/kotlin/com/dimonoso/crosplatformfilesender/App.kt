@@ -34,10 +34,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,7 +62,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.dimonoso.crosplatformfilesender.archive.ArchiveFormat
 import com.dimonoso.crosplatformfilesender.discovery.DiscoveredDevice
 import com.dimonoso.crosplatformfilesender.discovery.DiscoveryError
 import com.dimonoso.crosplatformfilesender.discovery.DiscoveryErrorType
@@ -73,11 +70,11 @@ import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import com.dimonoso.crosplatformfilesender.localization.AppLocaleEnvironment
-import com.dimonoso.crosplatformfilesender.platform.FileSystemAccessPolicy
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogError
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogErrorCode
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogResult
 import com.dimonoso.crosplatformfilesender.settings.AppLanguageMode
+import com.dimonoso.crosplatformfilesender.settings.AppSettings
 import com.dimonoso.crosplatformfilesender.settings.BackupMode
 import com.dimonoso.crosplatformfilesender.settings.getSystemLanguageCode
 import com.dimonoso.crosplatformfilesender.settings.isDiscoveryKeywordChar
@@ -92,12 +89,10 @@ import com.dimonoso.crosplatformfilesender.transfer.toTransferEndpoint
 import crosplatformfilesender.shared.generated.resources.Res
 import crosplatformfilesender.shared.generated.resources.add_folder
 import crosplatformfilesender.shared.generated.resources.add_upload
-import crosplatformfilesender.shared.generated.resources.app_title
 import crosplatformfilesender.shared.generated.resources.archive_download_message
 import crosplatformfilesender.shared.generated.resources.archive_download_title
 import crosplatformfilesender.shared.generated.resources.archive_no
 import crosplatformfilesender.shared.generated.resources.archive_yes
-import crosplatformfilesender.shared.generated.resources.archives
 import crosplatformfilesender.shared.generated.resources.backup_archives
 import crosplatformfilesender.shared.generated.resources.backup_empty
 import crosplatformfilesender.shared.generated.resources.backup_file
@@ -108,9 +103,7 @@ import crosplatformfilesender.shared.generated.resources.cancel
 import crosplatformfilesender.shared.generated.resources.catalog_server_error
 import crosplatformfilesender.shared.generated.resources.close
 import crosplatformfilesender.shared.generated.resources.delete
-import crosplatformfilesender.shared.generated.resources.device
-import crosplatformfilesender.shared.generated.resources.device_id
-import crosplatformfilesender.shared.generated.resources.discovery
+import crosplatformfilesender.shared.generated.resources.device_name
 import crosplatformfilesender.shared.generated.resources.discovery_error_port
 import crosplatformfilesender.shared.generated.resources.discovery_error_stopped
 import crosplatformfilesender.shared.generated.resources.discovery_error_unavailable
@@ -123,9 +116,7 @@ import crosplatformfilesender.shared.generated.resources.file_type_drive
 import crosplatformfilesender.shared.generated.resources.file_type_file
 import crosplatformfilesender.shared.generated.resources.file_type_folder
 import crosplatformfilesender.shared.generated.resources.file_type_other
-import crosplatformfilesender.shared.generated.resources.filesystem
 import crosplatformfilesender.shared.generated.resources.found_devices
-import crosplatformfilesender.shared.generated.resources.full_filesystem
 import crosplatformfilesender.shared.generated.resources.invalid_transfer_destination
 import crosplatformfilesender.shared.generated.resources.keyword
 import crosplatformfilesender.shared.generated.resources.keyword_allowed_characters
@@ -145,8 +136,6 @@ import crosplatformfilesender.shared.generated.resources.no_found_devices
 import crosplatformfilesender.shared.generated.resources.no_remote_files_available
 import crosplatformfilesender.shared.generated.resources.open
 import crosplatformfilesender.shared.generated.resources.pause
-import crosplatformfilesender.shared.generated.resources.persistence
-import crosplatformfilesender.shared.generated.resources.platform
 import crosplatformfilesender.shared.generated.resources.queue
 import crosplatformfilesender.shared.generated.resources.queue_empty
 import crosplatformfilesender.shared.generated.resources.queue_progress
@@ -163,7 +152,6 @@ import crosplatformfilesender.shared.generated.resources.request_download
 import crosplatformfilesender.shared.generated.resources.resume
 import crosplatformfilesender.shared.generated.resources.restore
 import crosplatformfilesender.shared.generated.resources.save
-import crosplatformfilesender.shared.generated.resources.scoped_storage
 import crosplatformfilesender.shared.generated.resources.search_active
 import crosplatformfilesender.shared.generated.resources.search_off
 import crosplatformfilesender.shared.generated.resources.select_device
@@ -171,7 +159,6 @@ import crosplatformfilesender.shared.generated.resources.send_selected
 import crosplatformfilesender.shared.generated.resources.settings_tab
 import crosplatformfilesender.shared.generated.resources.settings_title
 import crosplatformfilesender.shared.generated.resources.size_column
-import crosplatformfilesender.shared.generated.resources.start
 import crosplatformfilesender.shared.generated.resources.start_search_first
 import crosplatformfilesender.shared.generated.resources.status_cancelled
 import crosplatformfilesender.shared.generated.resources.status_completed
@@ -179,7 +166,6 @@ import crosplatformfilesender.shared.generated.resources.status_failed
 import crosplatformfilesender.shared.generated.resources.status_paused
 import crosplatformfilesender.shared.generated.resources.status_pending
 import crosplatformfilesender.shared.generated.resources.status_running
-import crosplatformfilesender.shared.generated.resources.stop
 import crosplatformfilesender.shared.generated.resources.task_cancel
 import crosplatformfilesender.shared.generated.resources.task_error
 import crosplatformfilesender.shared.generated.resources.to_roots
@@ -190,20 +176,12 @@ import crosplatformfilesender.shared.generated.resources.transfer_limits
 import crosplatformfilesender.shared.generated.resources.transfer_progress_bytes
 import crosplatformfilesender.shared.generated.resources.transfer_queue
 import crosplatformfilesender.shared.generated.resources.transfer_subtitle
-import crosplatformfilesender.shared.generated.resources.udp_lan
 import crosplatformfilesender.shared.generated.resources.type_column
 import crosplatformfilesender.shared.generated.resources.whitelist_empty
 import crosplatformfilesender.shared.generated.resources.whitelist_folders
-import crosplatformfilesender.shared.generated.resources.workspace_tab
-import crosplatformfilesender.shared.generated.resources.workspace_title
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
-
-private enum class AppSection {
-    Workspace,
-    Settings,
-}
 
 @Composable
 @Preview
@@ -212,8 +190,8 @@ fun App() {
     val settings by services.settings.settings.collectAsState()
     val systemLanguageCode = remember { getSystemLanguageCode() }
     val resolvedLanguage = resolveAppLanguage(settings.languageMode, systemLanguageCode)
-    var selectedSection by remember { mutableStateOf(AppSection.Workspace) }
     var showQueueDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
     AppLocaleEnvironment(resolvedLanguage.localeTag) {
         MaterialTheme {
@@ -231,32 +209,15 @@ fun App() {
                     AppHeader(
                         services = services,
                         onQueueClick = { showQueueDialog = true },
+                        onSettingsClick = { showSettingsDialog = true },
                     )
-                    PrimaryTabRow(selectedTabIndex = selectedSection.ordinal) {
-                        AppSection.entries.forEach { section ->
-                            Tab(
-                                selected = selectedSection == section,
-                                onClick = { selectedSection = section },
-                                text = {
-                                    Text(
-                                        text = sectionTitle(section),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                },
-                            )
-                        }
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
                             .verticalScroll(rememberScrollState()),
                     ) {
-                        when (selectedSection) {
-                            AppSection.Workspace -> WorkspaceSection(services)
-                            AppSection.Settings -> SettingsSection(services)
-                        }
+                        WorkspaceSection(services)
                     }
                 }
 
@@ -266,57 +227,113 @@ fun App() {
                         onDismiss = { showQueueDialog = false },
                     )
                 }
+                if (showSettingsDialog) {
+                    SettingsDialog(
+                        services = services,
+                        onDismiss = { showSettingsDialog = false },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun sectionTitle(section: AppSection): String =
-    when (section) {
-        AppSection.Workspace -> stringResource(Res.string.workspace_tab)
-        AppSection.Settings -> stringResource(Res.string.settings_tab)
-    }
-
-@Composable
 private fun AppHeader(
     services: AppServices,
     onQueueClick: () -> Unit,
+    onSettingsClick: () -> Unit,
 ) {
-    val networkState = remember(services) { services.platform.networkPermissions.currentState() }
-    val accessLabel = when (services.platform.fileSystem.accessPolicy) {
-        FileSystemAccessPolicy.FullFileSystem -> stringResource(Res.string.full_filesystem)
-        FileSystemAccessPolicy.ScopedStorage -> stringResource(Res.string.scoped_storage)
+    val settings by services.settings.settings.collectAsState()
+    val deviceDisplayName = settings.deviceDisplayNameOr(services.platform.deviceInfo.displayName)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = deviceDisplayName,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        SearchToggleButton(
+            services = services,
+            systemDeviceName = services.platform.deviceInfo.displayName,
+        )
+        QueueButton(
+            services = services,
+            onClick = onQueueClick,
+        )
+        OutlinedButton(onClick = onSettingsClick) {
+            Text(stringResource(Res.string.settings_tab), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+private fun AppSettings.deviceDisplayNameOr(systemDisplayName: String): String =
+    deviceDisplayName.ifBlank { systemDisplayName }
+
+private fun startLocalDiscovery(
+    services: AppServices,
+    keyword: String,
+    deviceDisplayName: String,
+) {
+    val config = services.platform.deviceInfo.toLocalDiscoveryConfig(keyword, deviceDisplayName)
+    services.remoteFileCatalog.stopServer()
+    services.transferQueue.stopServer()
+    services.discovery.start(config)
+    if (services.discovery.isRunning.value) {
+        services.remoteFileCatalog.startServer(config)
+        services.transferQueue.startServer((config.udpPort + 1).coerceAtMost(65535))
+    }
+}
+
+private fun stopLocalDiscovery(services: AppServices) {
+    services.remoteFileCatalog.stopServer()
+    services.transferQueue.stopServer()
+    services.discovery.stop()
+}
+
+@Composable
+private fun SearchToggleButton(
+    services: AppServices,
+    systemDeviceName: String,
+) {
+    val settings by services.settings.settings.collectAsState()
+    val isRunning by services.discovery.isRunning.collectAsState()
+    val keyword = settings.discoveryKeyword
+    val deviceDisplayName = settings.deviceDisplayNameOr(systemDeviceName)
+    val enabled = isRunning || isValidDiscoveryKeyword(keyword)
+    val label = if (isRunning) {
+        stringResource(Res.string.search_active)
+    } else {
+        stringResource(Res.string.search_off)
+    }
+    val onClick = {
+        if (isRunning) {
+            stopLocalDiscovery(services)
+        } else {
+            startLocalDiscovery(services, keyword, deviceDisplayName)
+        }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    if (isRunning) {
+        Button(
+            enabled = enabled,
+            onClick = onClick,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(Res.string.app_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = services.platform.deviceInfo.platformName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            QueueButton(
-                services = services,
-                onClick = onQueueClick,
-            )
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusPill(text = services.platform.deviceInfo.displayName)
-            StatusPill(text = accessLabel)
-            StatusPill(text = networkState.statusLabel)
-            StatusPill(text = stringResource(Res.string.udp_lan))
+    } else {
+        OutlinedButton(
+            enabled = enabled,
+            onClick = onClick,
+        ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -342,7 +359,6 @@ private fun WorkspaceSection(services: AppServices) {
     val settings by services.settings.settings.collectAsState()
     val devices by services.discovery.devices.collectAsState()
     val isRunning by services.discovery.isRunning.collectAsState()
-    val configSummary by services.discovery.activeConfigSummary.collectAsState()
     val lastError by services.discovery.lastError.collectAsState()
     val serverError by services.remoteFileCatalog.serverError.collectAsState()
 
@@ -353,81 +369,21 @@ private fun WorkspaceSection(services: AppServices) {
         }
     }
 
-    SectionColumn(title = stringResource(Res.string.workspace_title)) {
-        DiscoveryControls(
-            services = services,
-            keyword = settings.discoveryKeyword,
-            isRunning = isRunning,
-            configSummary = configSummary,
-            lastError = lastError,
-            serverError = serverError,
-        )
-        HorizontalDivider()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        lastError?.let { error ->
+            ErrorState(discoveryErrorText(error))
+        } ?: serverError?.let { error ->
+            ErrorState(stringResource(Res.string.catalog_server_error, error.message))
+        }
         DevicesPanel(devices)
         HorizontalDivider()
         FileBrowserColumns(
             services = services,
             devices = devices,
             keyword = settings.discoveryKeyword,
-        )
-    }
-}
-
-@Composable
-private fun DiscoveryControls(
-    services: AppServices,
-    keyword: String,
-    isRunning: Boolean,
-    configSummary: String?,
-    lastError: DiscoveryError?,
-    serverError: RemoteFileCatalogError?,
-) {
-    val canStart = isValidDiscoveryKeyword(keyword)
-
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Button(
-            enabled = isRunning || canStart,
-            onClick = {
-                if (isRunning) {
-                    services.remoteFileCatalog.stopServer()
-                    services.transferQueue.stopServer()
-                    services.discovery.stop()
-                } else {
-                    val config = services.platform.deviceInfo.toLocalDiscoveryConfig(keyword)
-                    services.discovery.start(config)
-                    if (services.discovery.isRunning.value) {
-                        services.remoteFileCatalog.startServer(config)
-                        services.transferQueue.startServer((config.udpPort + 1).coerceAtMost(65535))
-                    }
-                }
-            },
-        ) {
-            Text(if (isRunning) stringResource(Res.string.stop) else stringResource(Res.string.start))
-        }
-        StatusPill(
-            text = if (isRunning) {
-                stringResource(Res.string.search_active)
-            } else {
-                stringResource(Res.string.search_off)
-            },
-        )
-    }
-
-    lastError?.let { error ->
-        ErrorState(discoveryErrorText(error))
-    } ?: serverError?.let { error ->
-        ErrorState(stringResource(Res.string.catalog_server_error, error.message))
-    } ?: configSummary?.let { summary ->
-        Text(
-            text = summary,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -1142,23 +1098,42 @@ private fun SettingsSection(services: AppServices) {
     val settings by services.settings.settings.collectAsState()
     val whitelist by services.fileSystem.whitelist.collectAsState()
     val backupRecords by services.backups.records.collectAsState()
-    val networkState = remember(services) { services.platform.networkPermissions.currentState() }
-    val archiveFormats = remember(services) {
-        services.archive.supportedFormats.joinToString { format ->
-            when (format) {
-                ArchiveFormat.ZIP -> "ZIP"
-            }
-        }
-    }
+    val deviceDisplayName = settings.deviceDisplayNameOr(services.platform.deviceInfo.displayName)
 
+    var deviceNameDraft by remember { mutableStateOf(deviceDisplayName) }
     var showKeyword by remember { mutableStateOf(false) }
     var keywordDraft by remember { mutableStateOf(settings.discoveryKeyword) }
+
+    LaunchedEffect(deviceDisplayName) {
+        deviceNameDraft = deviceDisplayName
+    }
 
     LaunchedEffect(settings.discoveryKeyword) {
         keywordDraft = settings.discoveryKeyword
     }
 
     SectionColumn(title = stringResource(Res.string.settings_title)) {
+        DeviceNameSettings(
+            deviceName = deviceDisplayName,
+            deviceNameDraft = deviceNameDraft,
+            onDeviceNameDraftChange = { value ->
+                deviceNameDraft = value.filterNot { char -> char == '\n' || char == '\r' }
+            },
+            onSave = {
+                if (services.settings.updateDeviceDisplayName(deviceNameDraft)) {
+                    val updatedSettings = services.settings.settings.value
+                    if (services.discovery.isRunning.value) {
+                        startLocalDiscovery(
+                            services = services,
+                            keyword = updatedSettings.discoveryKeyword,
+                            deviceDisplayName = updatedSettings.deviceDisplayNameOr(services.platform.deviceInfo.displayName),
+                        )
+                    }
+                }
+            },
+            onCancel = { deviceNameDraft = deviceDisplayName },
+        )
+        HorizontalDivider()
         LanguageSettings(
             currentMode = settings.languageMode,
             onModeChange = services.settings::updateLanguageMode,
@@ -1201,14 +1176,43 @@ private fun SettingsSection(services: AppServices) {
             whitelist = whitelist,
             services = services,
         )
-        HorizontalDivider()
-        SettingRow(label = stringResource(Res.string.platform), value = services.platform.deviceInfo.platformName)
-        SettingRow(label = stringResource(Res.string.device), value = services.platform.deviceInfo.displayName)
-        SettingRow(label = stringResource(Res.string.device_id), value = settings.localDeviceId)
-        SettingRow(label = stringResource(Res.string.filesystem), value = services.platform.fileSystem.accessPolicy.name)
-        SettingRow(label = stringResource(Res.string.discovery), value = networkState.statusLabel)
-        SettingRow(label = stringResource(Res.string.archives), value = archiveFormats)
-        SettingRow(label = stringResource(Res.string.persistence), value = "settings.config")
+    }
+}
+
+@Composable
+private fun DeviceNameSettings(
+    deviceName: String,
+    deviceNameDraft: String,
+    onDeviceNameDraftChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val normalizedDraft = deviceNameDraft.trim()
+    val canSave = normalizedDraft.isNotBlank() && normalizedDraft != deviceName
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedTextField(
+            value = deviceNameDraft,
+            onValueChange = onDeviceNameDraftChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = deviceNameDraft.isNotBlank() && normalizedDraft.isBlank(),
+            label = { Text(stringResource(Res.string.device_name)) },
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = canSave,
+                onClick = onSave,
+            ) {
+                Text(stringResource(Res.string.save))
+            }
+            OutlinedButton(
+                enabled = deviceNameDraft != deviceName,
+                onClick = onCancel,
+            ) {
+                Text(stringResource(Res.string.cancel))
+            }
+        }
     }
 }
 
@@ -1458,6 +1462,31 @@ private fun WhitelistSettings(
             }
         }
     }
+}
+
+@Composable
+private fun SettingsDialog(
+    services: AppServices,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                SettingsSection(services)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(Res.string.close))
+            }
+        },
+    )
 }
 
 @Composable
@@ -1717,23 +1746,6 @@ private fun transferStatusLabel(status: TransferStatus): String =
         TransferStatus.Failed -> stringResource(Res.string.status_failed)
         TransferStatus.Cancelled -> stringResource(Res.string.status_cancelled)
     }
-
-@Composable
-private fun SettingRow(label: String, value: String) {
-    RowSurface {
-        Text(
-            text = label,
-            modifier = Modifier.width(160.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            modifier = Modifier.weight(1f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
 
 @Composable
 private fun RowSurface(content: @Composable RowScope.() -> Unit) {

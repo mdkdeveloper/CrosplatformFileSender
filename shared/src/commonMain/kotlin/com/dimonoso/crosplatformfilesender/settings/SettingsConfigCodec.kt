@@ -4,6 +4,7 @@ import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 
 internal object SettingsConfigCodec {
     private const val DeviceIdKey = "device.id"
+    private const val DeviceNameKey = "device.name"
     private const val KeywordKey = "discovery.keyword"
     private const val WhitelistCountKey = "whitelist.count"
     private const val LanguageKey = "ui.language"
@@ -15,6 +16,7 @@ internal object SettingsConfigCodec {
         buildString {
             appendLine("# CrosplatformFileSender settings")
             appendLine("$DeviceIdKey=${settings.localDeviceId.escapeConfigValue()}")
+            appendLine("$DeviceNameKey=${settings.deviceDisplayName.escapeConfigValue()}")
             appendLine("$KeywordKey=${settings.discoveryKeyword.escapeConfigValue()}")
             appendLine("$LanguageKey=${settings.languageMode.configValue}")
             appendLine("$MaxOutgoingTransfersKey=${settings.maxOutgoingTransfers.normalizeTransferLimit()}")
@@ -48,6 +50,10 @@ internal object SettingsConfigCodec {
             ?.takeIf(::isValidDiscoveryKeyword)
             ?: DefaultDiscoveryKeyword
         val localDeviceId = properties[DeviceIdKey]?.takeIf { it.isNotBlank() } ?: AppSettings().localDeviceId
+        val deviceDisplayName = properties[DeviceNameKey]
+            ?.trim()
+            ?.takeIf(::isValidDeviceDisplayName)
+            .orEmpty()
         val languageMode = AppLanguageMode.fromConfigValue(properties[LanguageKey])
         val maxOutgoingTransfers = properties[MaxOutgoingTransfersKey]
             ?.toIntOrNull()
@@ -72,6 +78,7 @@ internal object SettingsConfigCodec {
 
         return AppSettings(
             localDeviceId = localDeviceId,
+            deviceDisplayName = deviceDisplayName,
             discoveryKeyword = keyword,
             whitelistFolders = folders,
             languageMode = languageMode,

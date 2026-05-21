@@ -42,6 +42,7 @@
     <string name="discovery">Пошук</string>
     <string name="archives">Архіви</string>
     <string name="persistence">Збереження</string>
+    <string name="device_name">Назва пристрою</string>
     <string name="keyword">Ключове слово</string>
     <string name="keyword_allowed_template">Дозволено: %1$s</string>
     <string name="keyword_allowed_characters">букви, цифри, _ - . , &quot; &amp; $</string>

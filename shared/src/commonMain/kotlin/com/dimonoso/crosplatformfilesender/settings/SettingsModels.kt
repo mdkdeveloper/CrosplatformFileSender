@@ -25,6 +25,7 @@ enum class BackupMode(
 
 data class AppSettings(
     val localDeviceId: String = createLocalDeviceId(),
+    val deviceDisplayName: String = "",
     val discoveryKeyword: String = DefaultDiscoveryKeyword,
     val whitelistFolders: List<WhitelistFolder> = emptyList(),
     val languageMode: AppLanguageMode = AppLanguageMode.System,
@@ -35,6 +36,8 @@ data class AppSettings(
 
 interface SettingsService {
     val settings: StateFlow<AppSettings>
+
+    fun updateDeviceDisplayName(name: String): Boolean
 
     fun updateDiscoveryKeyword(keyword: String): Boolean
 
@@ -55,6 +58,9 @@ fun isDiscoveryKeywordChar(char: Char): Boolean =
 fun isValidDiscoveryKeyword(keyword: String): Boolean =
     keyword.isNotBlank() && keyword.all(::isDiscoveryKeywordChar)
 
+fun isValidDeviceDisplayName(name: String): Boolean =
+    name.isNotBlank()
+
 fun createSettingsService(): SettingsService =
     PersistentSettingsService(createSettingsStore())
 
@@ -67,6 +73,14 @@ internal class PersistentSettingsService(
 
     init {
         persist(_settings.value)
+    }
+
+    override fun updateDeviceDisplayName(name: String): Boolean {
+        val normalized = name.trim()
+        if (!isValidDeviceDisplayName(normalized)) return false
+
+        replace(_settings.value.copy(deviceDisplayName = normalized))
+        return true
     }
 
     override fun updateDiscoveryKeyword(keyword: String): Boolean {
@@ -104,6 +118,7 @@ internal class PersistentSettingsService(
 
         return stored.copy(
             localDeviceId = stored.localDeviceId.takeIf { it.isNotBlank() } ?: createLocalDeviceId(),
+            deviceDisplayName = stored.deviceDisplayName.trim().takeIf(::isValidDeviceDisplayName).orEmpty(),
             discoveryKeyword = stored.discoveryKeyword.takeIf(::isValidDiscoveryKeyword) ?: DefaultDiscoveryKeyword,
             maxOutgoingTransfers = stored.maxOutgoingTransfers.normalizeTransferLimit(),
             maxIncomingTransfers = stored.maxIncomingTransfers.normalizeTransferLimit(),

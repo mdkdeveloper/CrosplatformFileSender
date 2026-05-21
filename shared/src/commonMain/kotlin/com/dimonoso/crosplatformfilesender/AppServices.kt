@@ -34,8 +34,11 @@ data class AppServices(
 )
 
 fun createAppServices(): AppServices {
-    val settings = createSettingsService()
     val platformServices = createPlatformServices()
+    val settings = createSettingsService()
+    if (settings.settings.value.deviceDisplayName.isBlank()) {
+        settings.updateDeviceDisplayName(platformServices.deviceInfo.displayName)
+    }
     val platform = platformServices.copy(
         deviceInfo = platformServices.deviceInfo.copy(
             id = settings.settings.value.localDeviceId,
@@ -43,7 +46,7 @@ fun createAppServices(): AppServices {
     )
     val localEndpoint = TransferEndpoint(
         deviceId = platform.deviceInfo.id,
-        displayName = platform.deviceInfo.displayName,
+        displayName = settings.settings.value.deviceDisplayName.ifBlank { platform.deviceInfo.displayName },
     )
 
     val fileSystem = InMemoryFileSystemService(

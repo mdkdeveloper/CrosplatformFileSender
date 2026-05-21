@@ -29,7 +29,8 @@ function ConvertTo-BashSingleQuoted {
     return "'" + $Value.Replace("'", "'\''") + "'"
 }
 
-$wslPathOutput = & wsl.exe wslpath -a "$RepoRoot" 2>&1
+$wslInputPath = $RepoRoot -replace "\\", "/"
+$wslPathOutput = & wsl.exe wslpath -a "$wslInputPath" 2>&1
 $wslRoot = ($wslPathOutput | Select-Object -First 1).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslRoot)) {
     $wslPathDetails = Format-WslOutput $wslPathOutput
@@ -37,7 +38,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslRoot)) {
         throw "WSL is installed, but no Linux distro is available. Install one with: wsl.exe --install Ubuntu"
     }
 
-    throw "Could not convert the repository path to a WSL path. Details: $wslPathDetails"
+    throw "Could not convert the repository path to a WSL path. Windows path: $RepoRoot. WSL input path: $wslInputPath. Details: $wslPathDetails"
 }
 
 $openArg = if ($NoOpen) { "--no-open" } else { "--no-open" }

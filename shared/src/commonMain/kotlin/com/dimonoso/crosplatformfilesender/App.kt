@@ -107,7 +107,6 @@ import crosplatformfilesender.shared.generated.resources.device_name
 import crosplatformfilesender.shared.generated.resources.discovery_error_port
 import crosplatformfilesender.shared.generated.resources.discovery_error_stopped
 import crosplatformfilesender.shared.generated.resources.discovery_error_unavailable
-import crosplatformfilesender.shared.generated.resources.drop
 import crosplatformfilesender.shared.generated.resources.download_selected
 import crosplatformfilesender.shared.generated.resources.empty_or_limited_access
 import crosplatformfilesender.shared.generated.resources.file_entry_subtitle
@@ -154,7 +153,6 @@ import crosplatformfilesender.shared.generated.resources.restore
 import crosplatformfilesender.shared.generated.resources.save
 import crosplatformfilesender.shared.generated.resources.search_active
 import crosplatformfilesender.shared.generated.resources.search_off
-import crosplatformfilesender.shared.generated.resources.select_device
 import crosplatformfilesender.shared.generated.resources.send_selected
 import crosplatformfilesender.shared.generated.resources.settings_tab
 import crosplatformfilesender.shared.generated.resources.settings_title
@@ -180,6 +178,7 @@ import crosplatformfilesender.shared.generated.resources.type_column
 import crosplatformfilesender.shared.generated.resources.whitelist_empty
 import crosplatformfilesender.shared.generated.resources.whitelist_folders
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -361,11 +360,55 @@ private fun WorkspaceSection(services: AppServices) {
     val isRunning by services.discovery.isRunning.collectAsState()
     val lastError by services.discovery.lastError.collectAsState()
     val serverError by services.remoteFileCatalog.serverError.collectAsState()
+    var selectedDeviceId by remember { mutableStateOf<String?>(null) }
+    var selectedDeviceSnapshot by remember { mutableStateOf<DiscoveredDevice?>(null) }
+    var missingSelectedDeviceAttempts by remember { mutableStateOf(0) }
+
+    val liveSelectedDevice = devices.firstOrNull { device -> device.id == selectedDeviceId }
+    val selectedDevice = if (selectedDeviceId == null) null else liveSelectedDevice ?: selectedDeviceSnapshot
+    val visibleDevices = selectedDeviceSnapshot
+        ?.takeIf { snapshot -> selectedDeviceId == snapshot.id && devices.none { device -> device.id == snapshot.id } }
+        ?.let { snapshot -> listOf(snapshot) + devices }
+        ?: devices
+
+    LaunchedEffect(devices, selectedDeviceId) {
+        if (selectedDeviceId == null) {
+            selectedDeviceSnapshot = null
+            missingSelectedDeviceAttempts = 0
+            return@LaunchedEffect
+        }
+
+        val liveDevice = devices.firstOrNull { device -> device.id == selectedDeviceId }
+        if (liveDevice != null) {
+            selectedDeviceSnapshot = liveDevice
+            missingSelectedDeviceAttempts = 0
+        } else if (selectedDeviceSnapshot == null) {
+            selectedDeviceId = null
+            missingSelectedDeviceAttempts = 0
+        }
+    }
+
+    LaunchedEffect(selectedDeviceId, liveSelectedDevice?.id, isRunning, missingSelectedDeviceAttempts) {
+        if (!isRunning || selectedDeviceId == null || liveSelectedDevice != null) return@LaunchedEffect
+
+        if (missingSelectedDeviceAttempts >= SelectedDeviceMissingAttemptLimit) {
+            selectedDeviceId = null
+            selectedDeviceSnapshot = null
+            missingSelectedDeviceAttempts = 0
+            return@LaunchedEffect
+        }
+
+        delay(SelectedDeviceMissingAttemptIntervalMillis)
+        missingSelectedDeviceAttempts += 1
+    }
 
     LaunchedEffect(isRunning) {
         if (!isRunning) {
             services.remoteFileCatalog.stopServer()
             services.transferQueue.stopServer()
+            selectedDeviceId = null
+            selectedDeviceSnapshot = null
+            missingSelectedDeviceAttempts = 0
         }
     }
 
@@ -378,11 +421,19 @@ private fun WorkspaceSection(services: AppServices) {
         } ?: serverError?.let { error ->
             ErrorState(stringResource(Res.string.catalog_server_error, error.message))
         }
-        DevicesPanel(devices)
+        DevicesPanel(
+            devices = visibleDevices,
+            selectedDeviceId = selectedDeviceId,
+            onSelect = { device ->
+                selectedDeviceId = device.id
+                selectedDeviceSnapshot = device
+                missingSelectedDeviceAttempts = 0
+            },
+        )
         HorizontalDivider()
         FileBrowserColumns(
             services = services,
-            devices = devices,
+            selectedDevice = selectedDevice,
             keyword = settings.discoveryKeyword,
         )
     }
@@ -401,13 +452,23 @@ private fun discoveryErrorText(error: DiscoveryError): String =
     }
 
 @Composable
-private fun DevicesPanel(devices: List<DiscoveredDevice>) {
+private fun DevicesPanel(
+    devices: List<DiscoveredDevice>,
+    selectedDeviceId: String?,
+    onSelect: (DiscoveredDevice) -> Unit,
+) {
     SectionColumn(title = stringResource(Res.string.found_devices)) {
         if (devices.isEmpty()) {
             EmptyState(stringResource(Res.string.no_found_devices))
         } else {
-            devices.forEach { device ->
-                DeviceDropZone(device)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                devices.forEach { device ->
+                    DeviceDropZone(
+                        device = device,
+                        isSelected = device.id == selectedDeviceId,
+                        onClick = { onSelect(device) },
+                    )
+                }
             }
         }
     }
@@ -431,11 +492,13 @@ private data class FileSelectionModifiers(
 )
 
 private const val ParentEntryRowId = "__parent__"
+private const val SelectedDeviceMissingAttemptLimit = 5
+private const val SelectedDeviceMissingAttemptIntervalMillis = 2_000L
 
 @Composable
 private fun FileBrowserColumns(
     services: AppServices,
-    devices: List<DiscoveredDevice>,
+    selectedDevice: DiscoveredDevice?,
     keyword: String,
 ) {
     val localRoots = remember(services) { services.fileSystem.localRoots() }
@@ -443,28 +506,16 @@ private fun FileBrowserColumns(
     var localPathStack by remember { mutableStateOf<List<String?>>(emptyList()) }
     var localSelection by remember { mutableStateOf(FileBrowserSelection()) }
     var localReloadToken by remember { mutableStateOf(0) }
-    var selectedDeviceId by remember { mutableStateOf<String?>(null) }
-    var remotePath by remember { mutableStateOf<String?>(null) }
-    var remotePathStack by remember { mutableStateOf<List<String?>>(emptyList()) }
-    var remoteSelection by remember { mutableStateOf(FileBrowserSelection()) }
-    var remoteReloadToken by remember { mutableStateOf(0) }
-    var remoteState by remember { mutableStateOf<RemotePaneState>(RemotePaneState.Idle) }
+    var remotePath by remember(selectedDevice?.id) { mutableStateOf<String?>(null) }
+    var remotePathStack by remember(selectedDevice?.id) { mutableStateOf<List<String?>>(emptyList()) }
+    var remoteSelection by remember(selectedDevice?.id) { mutableStateOf(FileBrowserSelection()) }
+    var remoteReloadToken by remember(selectedDevice?.id) { mutableStateOf(0) }
+    var remoteState by remember(selectedDevice?.id) { mutableStateOf<RemotePaneState>(RemotePaneState.Idle) }
     var transferError by remember { mutableStateOf<String?>(null) }
     var pendingDownloadItems by remember { mutableStateOf<List<TransferItem>?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
 
-    LaunchedEffect(devices) {
-        val currentDeviceStillExists = devices.any { it.id == selectedDeviceId }
-        if (!currentDeviceStillExists) {
-            selectedDeviceId = devices.firstOrNull()?.id
-            remotePath = null
-            remotePathStack = emptyList()
-            remoteSelection = FileBrowserSelection()
-        }
-    }
-
-    val selectedDevice = devices.firstOrNull { it.id == selectedDeviceId }
     val localEntries = remember(localPath, localReloadToken, localRoots) {
         localPath?.let(services.fileSystem::browseLocal) ?: localRoots
     }
@@ -515,34 +566,24 @@ private fun FileBrowserColumns(
                 localPath = entry.path
                 localSelection = FileBrowserSelection()
             },
-            headerContent = {
-                if (selectedRemoteEntries.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                val destination = localPath
-                                if (destination == null) {
-                                    transferError = invalidDestinationText
-                                } else {
-                                    val items = selectedRemoteEntries.map(FileEntry::toTransferItem)
-                                    if (items.any { it.isDirectory }) {
-                                        pendingDownloadItems = items
-                                    } else {
-                                        selectedDevice?.let { device ->
-                                            services.transferQueue.enqueueDownload(
-                                                items = items,
-                                                source = device.toTransferEndpoint(),
-                                                destinationDirectoryPath = destination,
-                                                archiveDirectories = false,
-                                            )
-                                            remoteSelection = FileBrowserSelection()
-                                        }
-                                    }
-                                }
-                            },
-                        ) {
-                            Text(stringResource(Res.string.download_selected))
-                        }
+            topRowContent = {
+                if (selectedLocalEntries.isNotEmpty() && selectedDevice != null) {
+                    Button(
+                        onClick = {
+                            val destination = remotePath
+                            if (destination == null) {
+                                transferError = invalidDestinationText
+                            } else {
+                                services.transferQueue.enqueueUpload(
+                                    items = selectedLocalEntries.map(FileEntry::toTransferItem),
+                                    target = selectedDevice.toTransferEndpoint(),
+                                    destinationDirectoryPath = destination,
+                                )
+                                localSelection = FileBrowserSelection()
+                            }
+                        },
+                    ) {
+                        Text(stringResource(Res.string.send_selected))
                     }
                 }
             },
@@ -586,56 +627,57 @@ private fun FileBrowserColumns(
                 remotePath = entry.path
                 remoteSelection = FileBrowserSelection()
             },
-            headerContent = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RemoteDeviceSelector(
-                        devices = devices,
-                        selectedDeviceId = selectedDeviceId,
-                        onSelect = { device ->
-                            selectedDeviceId = device.id
-                            remotePath = null
-                            remotePathStack = emptyList()
-                            remoteSelection = FileBrowserSelection()
-                        },
-                    )
-                    if (selectedLocalEntries.isNotEmpty() && selectedDevice != null) {
-                        Button(
-                            onClick = {
-                                val destination = remotePath
-                                if (destination == null) {
-                                    transferError = invalidDestinationText
+            topRowContent = {
+                if (selectedRemoteEntries.isNotEmpty()) {
+                    Button(
+                        onClick = {
+                            val destination = localPath
+                            if (destination == null) {
+                                transferError = invalidDestinationText
+                            } else {
+                                val items = selectedRemoteEntries.map(FileEntry::toTransferItem)
+                                if (items.any { it.isDirectory }) {
+                                    pendingDownloadItems = items
                                 } else {
-                                    services.transferQueue.enqueueUpload(
-                                        items = selectedLocalEntries.map(FileEntry::toTransferItem),
-                                        target = selectedDevice.toTransferEndpoint(),
-                                        destinationDirectoryPath = destination,
-                                    )
-                                    localSelection = FileBrowserSelection()
+                                    selectedDevice?.let { device ->
+                                        services.transferQueue.enqueueDownload(
+                                            items = items,
+                                            source = device.toTransferEndpoint(),
+                                            destinationDirectoryPath = destination,
+                                            archiveDirectories = false,
+                                        )
+                                        remoteSelection = FileBrowserSelection()
+                                    }
                                 }
-                            },
-                        ) {
-                            Text(stringResource(Res.string.send_selected))
-                        }
+                            }
+                        },
+                    ) {
+                        Text(stringResource(Res.string.download_selected))
                     }
-                    transferError?.let { ErrorState(it) }
                 }
             },
         )
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        if (maxWidth < 760.dp) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                localPane(Modifier.fillMaxWidth())
-                remotePane(Modifier.fillMaxWidth())
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                localPane(Modifier.weight(1f))
-                remotePane(Modifier.weight(1f))
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        transferError?.let { ErrorState(it) }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (maxWidth < 760.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    localPane(Modifier.fillMaxWidth())
+                    remotePane(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    localPane(Modifier.weight(1f))
+                    remotePane(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -701,32 +743,6 @@ private fun FileBrowserColumns(
 }
 
 @Composable
-private fun RemoteDeviceSelector(
-    devices: List<DiscoveredDevice>,
-    selectedDeviceId: String?,
-    onSelect: (DiscoveredDevice) -> Unit,
-) {
-    if (devices.isEmpty()) {
-        StatusPill(text = stringResource(Res.string.no_found_devices))
-        return
-    }
-
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        devices.forEach { device ->
-            if (device.id == selectedDeviceId) {
-                Button(onClick = { onSelect(device) }) {
-                    Text(device.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            } else {
-                OutlinedButton(onClick = { onSelect(device) }) {
-                    Text(device.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun FileBrowserPane(
     title: String,
     path: String?,
@@ -742,7 +758,7 @@ private fun FileBrowserPane(
     selection: FileBrowserSelection,
     onSelectionChange: (FileBrowserSelection) -> Unit,
     onOpen: (FileEntry) -> Unit,
-    headerContent: @Composable (() -> Unit)? = null,
+    topRowContent: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(
         modifier = modifier.heightIn(min = 420.dp),
@@ -776,11 +792,11 @@ private fun FileBrowserPane(
                         Text(rootLabel)
                     }
                 }
+                topRowContent()
                 OutlinedButton(onClick = onRefresh) {
                     Text(stringResource(Res.string.refresh))
                 }
             }
-            headerContent?.invoke()
             when {
                 errorText != null -> ErrorState(errorText)
                 isLoading -> EmptyState(stringResource(Res.string.loading))
@@ -1568,31 +1584,18 @@ private fun SectionColumn(
 }
 
 @Composable
-private fun DeviceDropZone(device: DiscoveredDevice) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(device.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text(
-                    text = "${device.platformName} | ${device.host}:${device.port}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            StatusPill(text = stringResource(Res.string.drop))
+private fun DeviceDropZone(
+    device: DiscoveredDevice,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isSelected) {
+        Button(onClick = onClick) {
+            Text(device.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    } else {
+        OutlinedButton(onClick = onClick) {
+            Text(device.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

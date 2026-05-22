@@ -6,6 +6,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.draganddrop.dragAndDropSource
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -45,9 +47,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
@@ -491,7 +496,6 @@ private data class FileSelectionModifiers(
     val isToggleSelection: Boolean = false,
 )
 
-private const val ParentEntryRowId = "__parent__"
 private const val SelectedDeviceMissingAttemptLimit = 5
 private const val SelectedDeviceMissingAttemptIntervalMillis = 2_000L
 
@@ -513,6 +517,7 @@ private fun FileBrowserColumns(
     var remoteState by remember(selectedDevice?.id) { mutableStateOf<RemotePaneState>(RemotePaneState.Idle) }
     var transferError by remember { mutableStateOf<String?>(null) }
     var pendingDownloadItems by remember { mutableStateOf<List<TransferItem>?>(null) }
+    var activeDragPayload by remember { mutableStateOf<FilePaneDragPayload?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
 
@@ -522,6 +527,49 @@ private fun FileBrowserColumns(
     val remoteEntries = (remoteState as? RemotePaneState.Loaded)?.entries.orEmpty()
     val selectedLocalEntries = localEntries.filter { it.path in localSelection.selectedRowIds }
     val selectedRemoteEntries = remoteEntries.filter { it.path in remoteSelection.selectedRowIds }
+
+    fun requestFilePaneTransfer(
+        payload: FilePaneDragPayload,
+        target: FilePaneSide,
+    ): Boolean {
+        val destinationDirectoryPath = when (target) {
+            FilePaneSide.Local -> localPath
+            FilePaneSide.Remote -> remotePath
+        }
+
+        return when (val decision = filePaneDropDecision(payload, target, destinationDirectoryPath)) {
+            FilePaneDropDecision.Ignore -> false
+            FilePaneDropDecision.InvalidDestination -> {
+                transferError = invalidDestinationText
+                false
+            }
+            is FilePaneDropDecision.Upload -> {
+                val device = selectedDevice ?: return false
+                services.transferQueue.enqueueUpload(
+                    items = decision.items,
+                    target = device.toTransferEndpoint(),
+                    destinationDirectoryPath = decision.destinationDirectoryPath,
+                )
+                localSelection = FileBrowserSelection()
+                true
+            }
+            is FilePaneDropDecision.Download -> {
+                val device = selectedDevice ?: return false
+                services.transferQueue.enqueueDownload(
+                    items = decision.items,
+                    source = device.toTransferEndpoint(),
+                    destinationDirectoryPath = decision.destinationDirectoryPath,
+                    archiveDirectories = false,
+                )
+                remoteSelection = FileBrowserSelection()
+                true
+            }
+            is FilePaneDropDecision.ConfirmDirectoryDownload -> {
+                pendingDownloadItems = decision.items
+                true
+            }
+        }
+    }
 
     LaunchedEffect(selectedDevice?.id, remotePath, remoteReloadToken, keyword) {
         if (selectedDevice == null) {
@@ -561,6 +609,11 @@ private fun FileBrowserColumns(
             onRefresh = { localReloadToken += 1 },
             selection = localSelection,
             onSelectionChange = { localSelection = it },
+            side = FilePaneSide.Local,
+            activeDragPayload = activeDragPayload,
+            onDragStarted = { payload -> activeDragPayload = payload },
+            onDragEnded = { activeDragPayload = null },
+            onDrop = { payload -> requestFilePaneTransfer(payload, FilePaneSide.Local) },
             onOpen = { entry ->
                 localPathStack = localPathStack + localPath
                 localPath = entry.path
@@ -570,17 +623,10 @@ private fun FileBrowserColumns(
                 if (selectedLocalEntries.isNotEmpty() && selectedDevice != null) {
                     Button(
                         onClick = {
-                            val destination = remotePath
-                            if (destination == null) {
-                                transferError = invalidDestinationText
-                            } else {
-                                services.transferQueue.enqueueUpload(
-                                    items = selectedLocalEntries.map(FileEntry::toTransferItem),
-                                    target = selectedDevice.toTransferEndpoint(),
-                                    destinationDirectoryPath = destination,
-                                )
-                                localSelection = FileBrowserSelection()
-                            }
+                            requestFilePaneTransfer(
+                                payload = FilePaneDragPayload(FilePaneSide.Local, selectedLocalEntries),
+                                target = FilePaneSide.Remote,
+                            )
                         },
                     ) {
                         Text(stringResource(Res.string.send_selected))
@@ -622,6 +668,11 @@ private fun FileBrowserColumns(
             },
             selection = remoteSelection,
             onSelectionChange = { remoteSelection = it },
+            side = FilePaneSide.Remote,
+            activeDragPayload = activeDragPayload,
+            onDragStarted = { payload -> activeDragPayload = payload },
+            onDragEnded = { activeDragPayload = null },
+            onDrop = { payload -> requestFilePaneTransfer(payload, FilePaneSide.Remote) },
             onOpen = { entry ->
                 remotePathStack = remotePathStack + remotePath
                 remotePath = entry.path
@@ -631,25 +682,10 @@ private fun FileBrowserColumns(
                 if (selectedRemoteEntries.isNotEmpty()) {
                     Button(
                         onClick = {
-                            val destination = localPath
-                            if (destination == null) {
-                                transferError = invalidDestinationText
-                            } else {
-                                val items = selectedRemoteEntries.map(FileEntry::toTransferItem)
-                                if (items.any { it.isDirectory }) {
-                                    pendingDownloadItems = items
-                                } else {
-                                    selectedDevice?.let { device ->
-                                        services.transferQueue.enqueueDownload(
-                                            items = items,
-                                            source = device.toTransferEndpoint(),
-                                            destinationDirectoryPath = destination,
-                                            archiveDirectories = false,
-                                        )
-                                        remoteSelection = FileBrowserSelection()
-                                    }
-                                }
-                            }
+                            requestFilePaneTransfer(
+                                payload = FilePaneDragPayload(FilePaneSide.Remote, selectedRemoteEntries),
+                                target = FilePaneSide.Local,
+                            )
                         },
                     ) {
                         Text(stringResource(Res.string.download_selected))
@@ -757,14 +793,64 @@ private fun FileBrowserPane(
     onRefresh: () -> Unit,
     selection: FileBrowserSelection,
     onSelectionChange: (FileBrowserSelection) -> Unit,
+    side: FilePaneSide,
+    activeDragPayload: FilePaneDragPayload?,
+    onDragStarted: (FilePaneDragPayload) -> Unit,
+    onDragEnded: () -> Unit,
+    onDrop: (FilePaneDragPayload) -> Boolean,
     onOpen: (FileEntry) -> Unit,
     topRowContent: @Composable RowScope.() -> Unit = {},
 ) {
+    var isDropTargetHovered by remember(side) { mutableStateOf(false) }
+    val latestDragPayload = rememberUpdatedState(activeDragPayload)
+    val latestOnDragEnded = rememberUpdatedState(onDragEnded)
+    val latestOnDrop = rememberUpdatedState(onDrop)
+    val dropTarget = remember(side) {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                isDropTargetHovered = false
+                val payload = latestDragPayload.value ?: return false
+                val consumed = latestOnDrop.value(payload)
+                latestOnDragEnded.value()
+                return consumed
+            }
+
+            override fun onEntered(event: DragAndDropEvent) {
+                isDropTargetHovered = true
+            }
+
+            override fun onExited(event: DragAndDropEvent) {
+                isDropTargetHovered = false
+            }
+
+            override fun onEnded(event: DragAndDropEvent) {
+                isDropTargetHovered = false
+                latestOnDragEnded.value()
+            }
+        }
+    }
+
     Surface(
-        modifier = modifier.heightIn(min = 420.dp),
-        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier
+            .heightIn(min = 420.dp)
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { activeDragPayload?.canDropOn(side) == true },
+                target = dropTarget,
+            ),
+        color = if (isDropTargetHovered) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(
+            width = if (isDropTargetHovered) 2.dp else 1.dp,
+            color = if (isDropTargetHovered) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
     ) {
         Column(
             modifier = Modifier
@@ -806,6 +892,8 @@ private fun FileBrowserPane(
                     onParentClick = onParentClick,
                     selection = selection,
                     onSelectionChange = onSelectionChange,
+                    side = side,
+                    onDragStarted = onDragStarted,
                     onOpen = onOpen,
                 )
             }
@@ -819,6 +907,8 @@ private fun FileEntryTable(
     onParentClick: (() -> Unit)?,
     selection: FileBrowserSelection,
     onSelectionChange: (FileBrowserSelection) -> Unit,
+    side: FilePaneSide,
+    onDragStarted: (FilePaneDragPayload) -> Unit,
     onOpen: (FileEntry) -> Unit,
 ) {
     val rowIds = remember(entries, onParentClick != null) {
@@ -850,6 +940,15 @@ private fun FileEntryTable(
             FileEntryTableRow(
                 entry = entry,
                 isSelected = entry.path in selection.selectedRowIds,
+                side = side,
+                dragEntries = {
+                    filePaneDragEntries(
+                        entries = entries,
+                        selectedRowIds = selection.selectedRowIds,
+                        draggedRowId = entry.path,
+                    )
+                },
+                onDragStarted = onDragStarted,
                 onSelect = { modifiers ->
                     onSelectionChange(
                         selection.updatedSelection(
@@ -945,6 +1044,9 @@ private fun FileEntryTableHeader() {
 private fun FileEntryTableRow(
     entry: FileEntry,
     isSelected: Boolean,
+    side: FilePaneSide,
+    dragEntries: () -> List<FileEntry>,
+    onDragStarted: (FilePaneDragPayload) -> Unit,
     onSelect: (FileSelectionModifiers) -> Unit,
     onOpen: (FileEntry) -> Unit,
 ) {
@@ -959,6 +1061,11 @@ private fun FileEntryTableRow(
         modifier = Modifier
             .fillMaxWidth()
             .captureFileSelectionModifiers { clickModifiers = it }
+            .filePaneDragSource(
+                side = side,
+                dragEntries = dragEntries,
+                onDragStarted = onDragStarted,
+            )
             .combinedClickable(
                 onClick = { onSelect(clickModifiers) },
                 onDoubleClick = {
@@ -993,6 +1100,21 @@ private fun FileEntryTableRow(
         )
     }
 }
+
+private fun Modifier.filePaneDragSource(
+    side: FilePaneSide,
+    dragEntries: () -> List<FileEntry>,
+    onDragStarted: (FilePaneDragPayload) -> Unit,
+): Modifier =
+    dragAndDropSource(transferData = {
+        val entries = dragEntries()
+        if (entries.isEmpty()) {
+            null
+        } else {
+            onDragStarted(FilePaneDragPayload(side, entries))
+            createFilePaneDragTransferData()
+        }
+    })
 
 private fun Modifier.captureFileSelectionModifiers(
     onModifiersChange: (FileSelectionModifiers) -> Unit,
@@ -1058,14 +1180,6 @@ private fun FileBrowserSelection.updatedSelection(
         anchorRowId = rowId,
     )
 }
-
-private fun FileEntry.toTransferItem(): TransferItem =
-    TransferItem(
-        path = path,
-        displayName = name,
-        isDirectory = type == FileEntryType.Directory || type == FileEntryType.Drive,
-        sizeBytes = sizeBytes,
-    )
 
 private suspend fun collectRemoteDownloadItems(
     services: AppServices,

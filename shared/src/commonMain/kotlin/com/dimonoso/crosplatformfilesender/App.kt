@@ -498,6 +498,7 @@ private data class FileSelectionModifiers(
 
 private const val SelectedDeviceMissingAttemptLimit = 5
 private const val SelectedDeviceMissingAttemptIntervalMillis = 2_000L
+private const val PaneAutoRefreshDebounceMillis = 250L
 
 @Composable
 private fun FileBrowserColumns(
@@ -518,6 +519,10 @@ private fun FileBrowserColumns(
     var transferError by remember { mutableStateOf<String?>(null) }
     var pendingDownloadItems by remember { mutableStateOf<List<TransferItem>?>(null) }
     var activeDragPayload by remember { mutableStateOf<FilePaneDragPayload?>(null) }
+    var localAutoRefreshRequest by remember { mutableStateOf(0) }
+    var remoteAutoRefreshRequest by remember(selectedDevice?.id) { mutableStateOf(0) }
+    val transferTasks by services.transferQueue.tasks.collectAsState()
+    val autoRefreshTracker = remember(services.transferQueue) { TransferPaneAutoRefreshTracker() }
     val coroutineScope = rememberCoroutineScope()
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
 
@@ -527,6 +532,33 @@ private fun FileBrowserColumns(
     val remoteEntries = (remoteState as? RemotePaneState.Loaded)?.entries.orEmpty()
     val selectedLocalEntries = localEntries.filter { it.path in localSelection.selectedRowIds }
     val selectedRemoteEntries = remoteEntries.filter { it.path in remoteSelection.selectedRowIds }
+
+    LaunchedEffect(transferTasks, selectedDevice?.id, localPath, remotePath) {
+        val refreshRequest = autoRefreshTracker.consume(
+            tasks = transferTasks,
+            selectedRemoteDeviceId = selectedDevice?.id,
+            localPath = localPath,
+            remotePath = remotePath,
+        )
+        if (refreshRequest.local) {
+            localAutoRefreshRequest += 1
+        }
+        if (refreshRequest.remote) {
+            remoteAutoRefreshRequest += 1
+        }
+    }
+
+    LaunchedEffect(localAutoRefreshRequest) {
+        if (localAutoRefreshRequest == 0) return@LaunchedEffect
+        delay(PaneAutoRefreshDebounceMillis)
+        localReloadToken += 1
+    }
+
+    LaunchedEffect(selectedDevice?.id, remoteAutoRefreshRequest) {
+        if (remoteAutoRefreshRequest == 0) return@LaunchedEffect
+        delay(PaneAutoRefreshDebounceMillis)
+        remoteReloadToken += 1
+    }
 
     fun requestFilePaneTransfer(
         payload: FilePaneDragPayload,

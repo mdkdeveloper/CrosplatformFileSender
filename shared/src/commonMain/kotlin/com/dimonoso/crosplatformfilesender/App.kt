@@ -673,6 +673,13 @@ private fun FileBrowserColumns(
             onDragStarted = { payload -> activeDragPayload = payload },
             onDragEnded = { activeDragPayload = null },
             onDrop = { payload -> requestFilePaneTransfer(payload, FilePaneSide.Remote) },
+            onExternalDrop = { event ->
+                val droppedEntries = externalFilePaneDropEntries(event, services.platform.fileSystem)
+                requestFilePaneTransfer(
+                    payload = FilePaneDragPayload(FilePaneSide.Local, droppedEntries),
+                    target = FilePaneSide.Remote,
+                )
+            },
             onOpen = { entry ->
                 remotePathStack = remotePathStack + remotePath
                 remotePath = entry.path
@@ -798,6 +805,7 @@ private fun FileBrowserPane(
     onDragStarted: (FilePaneDragPayload) -> Unit,
     onDragEnded: () -> Unit,
     onDrop: (FilePaneDragPayload) -> Boolean,
+    onExternalDrop: ((DragAndDropEvent) -> Boolean)? = null,
     onOpen: (FileEntry) -> Unit,
     topRowContent: @Composable RowScope.() -> Unit = {},
 ) {
@@ -805,12 +813,17 @@ private fun FileBrowserPane(
     val latestDragPayload = rememberUpdatedState(activeDragPayload)
     val latestOnDragEnded = rememberUpdatedState(onDragEnded)
     val latestOnDrop = rememberUpdatedState(onDrop)
+    val latestOnExternalDrop = rememberUpdatedState(onExternalDrop)
     val dropTarget = remember(side) {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 isDropTargetHovered = false
-                val payload = latestDragPayload.value ?: return false
-                val consumed = latestOnDrop.value(payload)
+                val payload = latestDragPayload.value
+                val consumed = if (payload != null) {
+                    latestOnDrop.value(payload)
+                } else {
+                    latestOnExternalDrop.value?.invoke(event) == true
+                }
                 latestOnDragEnded.value()
                 return consumed
             }
@@ -834,7 +847,10 @@ private fun FileBrowserPane(
         modifier = modifier
             .heightIn(min = 420.dp)
             .dragAndDropTarget(
-                shouldStartDragAndDrop = { activeDragPayload?.canDropOn(side) == true },
+                shouldStartDragAndDrop = { event ->
+                    activeDragPayload?.canDropOn(side) == true ||
+                        onExternalDrop != null && isExternalFilePaneDropEvent(event)
+                },
                 target = dropTarget,
             ),
         color = if (isDropTargetHovered) {

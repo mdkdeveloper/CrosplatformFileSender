@@ -57,6 +57,30 @@ class FilePaneDragDropTest {
     }
 
     @Test
+    fun externalLocalEntriesUploadToRemotePane() {
+        val decision = filePaneDropDecision(
+            payload = FilePaneDragPayload(FilePaneSide.Local, listOf(testEntries()[0], testEntries()[1])),
+            target = FilePaneSide.Remote,
+            destinationDirectoryPath = "/remote/inbox",
+        )
+
+        val upload = assertIs<FilePaneDropDecision.Upload>(decision)
+        assertEquals("/remote/inbox", upload.destinationDirectoryPath)
+        assertEquals(listOf("/shared/report.txt", "/shared/photos"), upload.items.map { item -> item.path })
+    }
+
+    @Test
+    fun emptyExternalEntryListIsIgnored() {
+        val decision = filePaneDropDecision(
+            payload = FilePaneDragPayload(FilePaneSide.Local, emptyList()),
+            target = FilePaneSide.Remote,
+            destinationDirectoryPath = "/remote/inbox",
+        )
+
+        assertIs<FilePaneDropDecision.Ignore>(decision)
+    }
+
+    @Test
     fun remoteFileDropDownloadsDirectly() {
         val decision = filePaneDropDecision(
             payload = FilePaneDragPayload(FilePaneSide.Remote, listOf(testEntries()[0])),

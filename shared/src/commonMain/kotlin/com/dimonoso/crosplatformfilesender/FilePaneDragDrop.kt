@@ -1,8 +1,10 @@
 package com.dimonoso.crosplatformfilesender
 
+import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
+import com.dimonoso.crosplatformfilesender.platform.PlatformFileSystem
 import com.dimonoso.crosplatformfilesender.transfer.TransferItem
 
 internal const val ParentEntryRowId = "__parent__"
@@ -85,3 +87,10 @@ internal fun FileEntry.toTransferItem(): TransferItem =
     )
 
 internal expect fun createFilePaneDragTransferData(): DragAndDropTransferData
+
+internal expect fun isExternalFilePaneDropEvent(event: DragAndDropEvent): Boolean
+
+internal expect fun externalFilePaneDropEntries(
+    event: DragAndDropEvent,
+    fileSystem: PlatformFileSystem,
+): List<FileEntry>

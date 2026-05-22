@@ -1,5 +1,8 @@
 package com.dimonoso.crosplatformfilesender.remote
 
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteBatchResult
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteResult
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteStatus
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import kotlin.test.Test
@@ -16,6 +19,19 @@ class RemoteFileCatalogProtocolTest {
         val decoded = RemoteFileCatalogProtocol.decodeRequest(
             RemoteFileCatalogProtocol.encodeRequest(request),
         )
+
+        assertEquals(request, decoded)
+    }
+
+    @Test
+    fun deleteRequestRoundTripKeepsSelectedPaths() {
+        val request = RemoteFileCatalogRequest(
+            keywordFingerprint = "fingerprint=with%chars",
+            operation = RemoteFileCatalogOperation.Delete,
+            deletePaths = listOf("/shared/a.txt", "/shared/folder"),
+        )
+
+        val decoded = RemoteFileCatalogProtocol.decodeRequest(RemoteFileCatalogProtocol.encodeRequest(request))
 
         assertEquals(request, decoded)
     }
@@ -59,6 +75,22 @@ class RemoteFileCatalogProtocolTest {
         val decoded = RemoteFileCatalogProtocol.decodeResponse(
             RemoteFileCatalogProtocol.encodeResponse(response),
         )
+
+        assertEquals(response, decoded)
+    }
+
+    @Test
+    fun deleteResponseRoundTripKeepsPerPathResults() {
+        val response = RemoteFileCatalogResponse.DeleteCompleted(
+            FileDeleteBatchResult(
+                listOf(
+                    FileDeleteResult("/shared/a.txt", FileDeleteStatus.Deleted),
+                    FileDeleteResult("/shared/folder", FileDeleteStatus.Refused, "not allowed"),
+                ),
+            ),
+        )
+
+        val decoded = RemoteFileCatalogProtocol.decodeResponse(RemoteFileCatalogProtocol.encodeResponse(response))
 
         assertEquals(response, decoded)
     }

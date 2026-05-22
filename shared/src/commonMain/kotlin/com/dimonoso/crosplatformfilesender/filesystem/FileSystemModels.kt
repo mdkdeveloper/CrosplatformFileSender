@@ -24,7 +24,73 @@ data class WhitelistFolder(
     val displayName: String,
     val path: String,
     val enabled: Boolean = true,
+    val deletePolicyOverride: WhitelistDeletePolicyOverride = WhitelistDeletePolicyOverride.UseDefault,
 )
+
+enum class RemoteDeletePolicy(
+    val configValue: String,
+) {
+    DoNothing("none"),
+    Ask("ask"),
+    Trash("trash"),
+    Permanent("permanent");
+
+    companion object {
+        fun fromConfigValue(value: String?): RemoteDeletePolicy =
+            entries.firstOrNull { it.configValue == value } ?: DoNothing
+    }
+}
+
+enum class WhitelistDeletePolicyOverride(
+    val configValue: String,
+) {
+    UseDefault("default"),
+    DoNothing("none"),
+    Ask("ask"),
+    Trash("trash"),
+    Permanent("permanent");
+
+    fun explicitPolicy(): RemoteDeletePolicy? =
+        when (this) {
+            UseDefault -> null
+            DoNothing -> RemoteDeletePolicy.DoNothing
+            Ask -> RemoteDeletePolicy.Ask
+            Trash -> RemoteDeletePolicy.Trash
+            Permanent -> RemoteDeletePolicy.Permanent
+        }
+
+    companion object {
+        fun fromConfigValue(value: String?): WhitelistDeletePolicyOverride =
+            entries.firstOrNull { it.configValue == value } ?: UseDefault
+    }
+}
+
+enum class FileDeleteMode {
+    Trash,
+    Permanent,
+}
+
+enum class FileDeleteStatus {
+    Deleted,
+    Refused,
+    Failed,
+}
+
+data class FileDeleteResult(
+    val path: String,
+    val status: FileDeleteStatus,
+    val message: String = "",
+)
+
+data class FileDeleteBatchResult(
+    val results: List<FileDeleteResult>,
+) {
+    val hasDeletedEntries: Boolean
+        get() = results.any { it.status == FileDeleteStatus.Deleted }
+
+    val firstProblem: FileDeleteResult?
+        get() = results.firstOrNull { it.status != FileDeleteStatus.Deleted }
+}
 
 sealed interface WhitelistedBrowseResult {
     data class Success(
@@ -49,11 +115,21 @@ interface FileSystemService {
 
     fun setWhitelistEnabled(folderId: String, enabled: Boolean)
 
+    fun setWhitelistDeletePolicyOverride(folderId: String, deletePolicyOverride: WhitelistDeletePolicyOverride)
+
     fun browseWhitelisted(path: String? = null): List<FileEntry>
 
     fun browseWhitelistedResult(path: String? = null): WhitelistedBrowseResult
 
     fun browseRemote(device: DiscoveredDevice, path: String? = null): List<FileEntry>
+
+    fun canMoveToTrash(path: String): Boolean
+
+    fun deleteLocalToTrash(paths: List<String>): FileDeleteBatchResult
+
+    fun effectiveRemoteDeletePolicy(path: String, defaultPolicy: RemoteDeletePolicy): RemoteDeletePolicy?
+
+    fun deleteWhitelisted(paths: List<String>, mode: FileDeleteMode): FileDeleteBatchResult
 }
 
 class InMemoryFileSystemService(
@@ -81,6 +157,12 @@ class InMemoryFileSystemService(
     override fun setWhitelistEnabled(folderId: String, enabled: Boolean) {
         replaceWhitelist(_whitelist.value.map { folder ->
             if (folder.id == folderId) folder.copy(enabled = enabled) else folder
+        })
+    }
+
+    override fun setWhitelistDeletePolicyOverride(folderId: String, deletePolicyOverride: WhitelistDeletePolicyOverride) {
+        replaceWhitelist(_whitelist.value.map { folder ->
+            if (folder.id == folderId) folder.copy(deletePolicyOverride = deletePolicyOverride) else folder
         })
     }
 
@@ -116,6 +198,84 @@ class InMemoryFileSystemService(
 
     override fun browseRemote(device: DiscoveredDevice, path: String?): List<FileEntry> = browseWhitelisted(path)
 
+    override fun canMoveToTrash(path: String): Boolean =
+        !isProtectedRoot(path) && !isLocalFileSystemRoot(path) && platformFileSystem.canMoveToTrash(path)
+
+    override fun deleteLocalToTrash(paths: List<String>): FileDeleteBatchResult =
+        FileDeleteBatchResult(paths.distinct().map(::moveLocalPathToTrash))
+
+    override fun effectiveRemoteDeletePolicy(path: String, defaultPolicy: RemoteDeletePolicy): RemoteDeletePolicy? {
+        val containingFolders = _whitelist.value
+            .filter { folder -> folder.enabled && isInside(path, folder.path) }
+            .sortedByDescending { folder -> normalizePath(folder.path).length }
+        if (containingFolders.isEmpty()) return null
+
+        return containingFolders
+            .firstNotNullOfOrNull { folder -> folder.deletePolicyOverride.explicitPolicy() }
+            ?: defaultPolicy
+    }
+
+    override fun deleteWhitelisted(paths: List<String>, mode: FileDeleteMode): FileDeleteBatchResult =
+        FileDeleteBatchResult(paths.distinct().map { path -> deleteWhitelistedPath(path, mode) })
+
+    private fun moveLocalPathToTrash(path: String): FileDeleteResult {
+        localDeleteRefusal(path)?.let { message -> return path.refused(message) }
+        if (!platformFileSystem.canMoveToTrash(path)) {
+            return path.refused("The selected item cannot be moved to trash.")
+        }
+        return if (platformFileSystem.moveToTrash(path)) {
+            path.deleted()
+        } else {
+            path.failed("Could not move the selected item to trash.")
+        }
+    }
+
+    private fun deleteWhitelistedPath(path: String, mode: FileDeleteMode): FileDeleteResult {
+        remoteDeleteRefusal(path)?.let { message -> return path.refused(message) }
+        return when (mode) {
+            FileDeleteMode.Trash -> {
+                if (!platformFileSystem.canMoveToTrash(path)) {
+                    path.refused("The selected item cannot be moved to trash.")
+                } else if (platformFileSystem.moveToTrash(path)) {
+                    path.deleted()
+                } else {
+                    path.failed("Could not move the selected item to trash.")
+                }
+            }
+            FileDeleteMode.Permanent -> {
+                if (platformFileSystem.delete(path, recursive = true)) {
+                    path.deleted()
+                } else {
+                    path.failed("Could not delete the selected item.")
+                }
+            }
+        }
+    }
+
+    private fun localDeleteRefusal(path: String): String? =
+        when {
+            isProtectedRoot(path) -> "Whitelist folders cannot be deleted."
+            isLocalFileSystemRoot(path) -> "Filesystem roots cannot be deleted."
+            platformFileSystem.metadata(path) == null -> "The selected item was not found."
+            else -> null
+        }
+
+    private fun remoteDeleteRefusal(path: String): String? =
+        when {
+            _whitelist.value.none { folder -> folder.enabled && isInside(path, folder.path) } ->
+                "The selected item is outside the whitelist."
+            isProtectedRoot(path) -> "Whitelist folders cannot be deleted."
+            platformFileSystem.metadata(path) == null -> "The selected item was not found."
+            else -> null
+        }
+
+    private fun isProtectedRoot(path: String): Boolean =
+        _whitelist.value.any { folder -> samePath(path, folder.path) }
+
+    private fun isLocalFileSystemRoot(path: String): Boolean =
+        platformFileSystem.roots().any { root -> samePath(path, root.path) } ||
+            platformFileSystem.metadata(path)?.type == FileEntryType.Drive
+
     private fun samePath(left: String, right: String): Boolean =
         normalizePath(left).equals(normalizePath(right), ignoreCase = true)
 
@@ -136,3 +296,12 @@ class InMemoryFileSystemService(
         onWhitelistChanged(folders)
     }
 }
+
+private fun String.deleted(): FileDeleteResult =
+    FileDeleteResult(path = this, status = FileDeleteStatus.Deleted)
+
+private fun String.refused(message: String): FileDeleteResult =
+    FileDeleteResult(path = this, status = FileDeleteStatus.Refused, message = message)
+
+private fun String.failed(message: String): FileDeleteResult =
+    FileDeleteResult(path = this, status = FileDeleteStatus.Failed, message = message)

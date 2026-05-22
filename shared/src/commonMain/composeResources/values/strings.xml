@@ -72,6 +72,17 @@
     <string name="backup_folder">Backup folder</string>
     <string name="backup_archives">Backup archives</string>
     <string name="backup_empty">No backup archives</string>
+    <string name="remote_delete_policy">Remote delete requests</string>
+    <string name="delete_policy_default">Default</string>
+    <string name="delete_policy_none">Do nothing</string>
+    <string name="delete_policy_ask">Ask</string>
+    <string name="delete_policy_trash">Move to trash</string>
+    <string name="delete_policy_permanent">Delete permanently</string>
+    <string name="local_delete_title">Move to trash?</string>
+    <string name="local_delete_message">Move the selected files and folders to trash?</string>
+    <string name="remote_delete_prompt_title">Remote delete request</string>
+    <string name="remote_delete_prompt_message">Another device requested deletion of %1$s selected item(s).</string>
+    <string name="delete_problem">Delete did not complete:</string>
     <string name="restore">Restore</string>
     <string name="delete">Delete</string>
     <string name="task_error">Error: %1$s</string>

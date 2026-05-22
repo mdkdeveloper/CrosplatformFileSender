@@ -74,6 +74,7 @@ fun createAppServices(): AppServices {
         remoteFileCatalog = createRemoteFileCatalogService(
             fileSystem = fileSystem,
             keywordProvider = { settings.settings.value.discoveryKeyword },
+            deletePolicyProvider = { settings.settings.value.remoteDeletePolicy },
         ),
         transferQueue = NetworkTransferQueueService(
             localEndpoint = localEndpoint,

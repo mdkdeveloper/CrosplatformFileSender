@@ -57,6 +57,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
@@ -72,12 +77,17 @@ import com.dimonoso.crosplatformfilesender.discovery.DiscoveryError
 import com.dimonoso.crosplatformfilesender.discovery.DiscoveryErrorType
 import com.dimonoso.crosplatformfilesender.discovery.toLocalDiscoveryConfig
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteBatchResult
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
+import com.dimonoso.crosplatformfilesender.filesystem.RemoteDeletePolicy
+import com.dimonoso.crosplatformfilesender.filesystem.WhitelistDeletePolicyOverride
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import com.dimonoso.crosplatformfilesender.localization.AppLocaleEnvironment
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogError
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogErrorCode
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogResult
+import com.dimonoso.crosplatformfilesender.remote.RemoteFileDeleteResult
+import com.dimonoso.crosplatformfilesender.remote.RemoteDeletePromptDecision
 import com.dimonoso.crosplatformfilesender.settings.AppLanguageMode
 import com.dimonoso.crosplatformfilesender.settings.AppSettings
 import com.dimonoso.crosplatformfilesender.settings.BackupMode
@@ -108,6 +118,12 @@ import crosplatformfilesender.shared.generated.resources.cancel
 import crosplatformfilesender.shared.generated.resources.catalog_server_error
 import crosplatformfilesender.shared.generated.resources.close
 import crosplatformfilesender.shared.generated.resources.delete
+import crosplatformfilesender.shared.generated.resources.delete_policy_ask
+import crosplatformfilesender.shared.generated.resources.delete_policy_default
+import crosplatformfilesender.shared.generated.resources.delete_policy_none
+import crosplatformfilesender.shared.generated.resources.delete_policy_permanent
+import crosplatformfilesender.shared.generated.resources.delete_policy_trash
+import crosplatformfilesender.shared.generated.resources.delete_problem
 import crosplatformfilesender.shared.generated.resources.device_name
 import crosplatformfilesender.shared.generated.resources.discovery_error_port
 import crosplatformfilesender.shared.generated.resources.discovery_error_stopped
@@ -130,6 +146,8 @@ import crosplatformfilesender.shared.generated.resources.language_english
 import crosplatformfilesender.shared.generated.resources.language_system
 import crosplatformfilesender.shared.generated.resources.language_ukrainian
 import crosplatformfilesender.shared.generated.resources.loading
+import crosplatformfilesender.shared.generated.resources.local_delete_message
+import crosplatformfilesender.shared.generated.resources.local_delete_title
 import crosplatformfilesender.shared.generated.resources.manual_peer
 import crosplatformfilesender.shared.generated.resources.max_incoming_transfers
 import crosplatformfilesender.shared.generated.resources.max_outgoing_transfers
@@ -151,6 +169,9 @@ import crosplatformfilesender.shared.generated.resources.remote_error_outside_wh
 import crosplatformfilesender.shared.generated.resources.remote_error_server_unavailable
 import crosplatformfilesender.shared.generated.resources.remote_error_unauthorized
 import crosplatformfilesender.shared.generated.resources.remote_error_unknown
+import crosplatformfilesender.shared.generated.resources.remote_delete_policy
+import crosplatformfilesender.shared.generated.resources.remote_delete_prompt_message
+import crosplatformfilesender.shared.generated.resources.remote_delete_prompt_title
 import crosplatformfilesender.shared.generated.resources.remove
 import crosplatformfilesender.shared.generated.resources.request_download
 import crosplatformfilesender.shared.generated.resources.resume
@@ -237,6 +258,7 @@ fun App() {
                         onDismiss = { showSettingsDialog = false },
                     )
                 }
+                PendingRemoteDeleteDialog(services)
             }
         }
     }
@@ -510,6 +532,7 @@ private fun FileBrowserColumns(
     var localPath by remember { mutableStateOf<String?>(null) }
     var localPathStack by remember { mutableStateOf<List<String?>>(emptyList()) }
     var localSelection by remember { mutableStateOf(FileBrowserSelection()) }
+    var activeFilePane by remember { mutableStateOf<FilePaneSide?>(null) }
     var localReloadToken by remember { mutableStateOf(0) }
     var remotePath by remember(selectedDevice?.id) { mutableStateOf<String?>(null) }
     var remotePathStack by remember(selectedDevice?.id) { mutableStateOf<List<String?>>(emptyList()) }
@@ -517,6 +540,8 @@ private fun FileBrowserColumns(
     var remoteReloadToken by remember(selectedDevice?.id) { mutableStateOf(0) }
     var remoteState by remember(selectedDevice?.id) { mutableStateOf<RemotePaneState>(RemotePaneState.Idle) }
     var transferError by remember { mutableStateOf<String?>(null) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    var pendingLocalDeleteEntries by remember { mutableStateOf<List<FileEntry>?>(null) }
     var pendingDownloadItems by remember { mutableStateOf<List<TransferItem>?>(null) }
     var activeDragPayload by remember { mutableStateOf<FilePaneDragPayload?>(null) }
     var localAutoRefreshRequest by remember { mutableStateOf(0) }
@@ -525,6 +550,7 @@ private fun FileBrowserColumns(
     val autoRefreshTracker = remember(services.transferQueue) { TransferPaneAutoRefreshTracker() }
     val coroutineScope = rememberCoroutineScope()
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
+    val deleteProblemText = stringResource(Res.string.delete_problem)
 
     val localEntries = remember(localPath, localReloadToken, localRoots) {
         localPath?.let(services.fileSystem::browseLocal) ?: localRoots
@@ -603,6 +629,39 @@ private fun FileBrowserColumns(
         }
     }
 
+    fun setDeleteProblem(result: FileDeleteBatchResult) {
+        deleteError = result.firstProblem?.let { problem -> "$deleteProblemText ${problem.message}" }
+    }
+
+    fun requestDelete(side: FilePaneSide) {
+        when (side) {
+            FilePaneSide.Local -> {
+                if (selectedLocalEntries.isNotEmpty()) {
+                    pendingLocalDeleteEntries = selectedLocalEntries
+                }
+            }
+            FilePaneSide.Remote -> {
+                val device = selectedDevice ?: return
+                if (selectedRemoteEntries.isEmpty()) return
+
+                coroutineScope.launch {
+                    when (val result = services.remoteFileCatalog.delete(device, selectedRemoteEntries.map { it.path })) {
+                        is RemoteFileDeleteResult.Completed -> {
+                            setDeleteProblem(result.result)
+                            if (result.result.hasDeletedEntries) {
+                                remoteSelection = FileBrowserSelection()
+                                remoteReloadToken += 1
+                            }
+                        }
+                        is RemoteFileDeleteResult.Failure -> {
+                            deleteError = "$deleteProblemText ${result.error.message}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(selectedDevice?.id, remotePath, remoteReloadToken, keyword) {
         if (selectedDevice == null) {
             remoteState = RemotePaneState.Idle
@@ -640,12 +699,18 @@ private fun FileBrowserColumns(
             },
             onRefresh = { localReloadToken += 1 },
             selection = localSelection,
-            onSelectionChange = { localSelection = it },
+            onSelectionChange = {
+                activeFilePane = FilePaneSide.Local
+                localSelection = it
+                remoteSelection = FileBrowserSelection()
+            },
             side = FilePaneSide.Local,
             activeDragPayload = activeDragPayload,
             onDragStarted = { payload -> activeDragPayload = payload },
             onDragEnded = { activeDragPayload = null },
             onDrop = { payload -> requestFilePaneTransfer(payload, FilePaneSide.Local) },
+            onDelete = { requestDelete(FilePaneSide.Local) },
+            deleteKeyEnabled = activeFilePane == FilePaneSide.Local,
             onOpen = { entry ->
                 localPathStack = localPathStack + localPath
                 localPath = entry.path
@@ -699,7 +764,11 @@ private fun FileBrowserColumns(
                 if (selectedDevice != null) remoteReloadToken += 1
             },
             selection = remoteSelection,
-            onSelectionChange = { remoteSelection = it },
+            onSelectionChange = {
+                activeFilePane = FilePaneSide.Remote
+                remoteSelection = it
+                localSelection = FileBrowserSelection()
+            },
             side = FilePaneSide.Remote,
             activeDragPayload = activeDragPayload,
             onDragStarted = { payload -> activeDragPayload = payload },
@@ -712,6 +781,8 @@ private fun FileBrowserColumns(
                     target = FilePaneSide.Remote,
                 )
             },
+            onDelete = { requestDelete(FilePaneSide.Remote) },
+            deleteKeyEnabled = activeFilePane == FilePaneSide.Remote,
             onOpen = { entry ->
                 remotePathStack = remotePathStack + remotePath
                 remotePath = entry.path
@@ -739,6 +810,7 @@ private fun FileBrowserColumns(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         transferError?.let { ErrorState(it) }
+        deleteError?.let { ErrorState(it) }
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             if (maxWidth < 760.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -815,6 +887,35 @@ private fun FileBrowserColumns(
             },
         )
     }
+
+    val localItemsToDelete = pendingLocalDeleteEntries
+    if (localItemsToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { pendingLocalDeleteEntries = null },
+            title = { Text(stringResource(Res.string.local_delete_title)) },
+            text = { Text(stringResource(Res.string.local_delete_message)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val result = services.fileSystem.deleteLocalToTrash(localItemsToDelete.map { it.path })
+                        setDeleteProblem(result)
+                        if (result.hasDeletedEntries) {
+                            localSelection = FileBrowserSelection()
+                            localReloadToken += 1
+                        }
+                        pendingLocalDeleteEntries = null
+                    },
+                ) {
+                    Text(stringResource(Res.string.delete_policy_trash))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingLocalDeleteEntries = null }) {
+                    Text(stringResource(Res.string.cancel))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -838,6 +939,8 @@ private fun FileBrowserPane(
     onDragEnded: () -> Unit,
     onDrop: (FilePaneDragPayload) -> Boolean,
     onExternalDrop: ((DragAndDropEvent) -> Boolean)? = null,
+    onDelete: () -> Unit,
+    deleteKeyEnabled: Boolean,
     onOpen: (FileEntry) -> Unit,
     topRowContent: @Composable RowScope.() -> Unit = {},
 ) {
@@ -878,6 +981,14 @@ private fun FileBrowserPane(
     Surface(
         modifier = modifier
             .heightIn(min = 420.dp)
+            .onPreviewKeyEvent { event ->
+                if (deleteKeyEnabled && event.type == KeyEventType.KeyDown && event.key == Key.Delete) {
+                    onDelete()
+                    true
+                } else {
+                    false
+                }
+            }
             .dragAndDropTarget(
                 shouldStartDragAndDrop = { event ->
                     activeDragPayload?.canDropOn(side) == true ||
@@ -1033,7 +1144,6 @@ private fun FileEntryParentRow(
             .combinedClickable(
                 onClick = { onSelect(clickModifiers) },
                 onDoubleClick = {
-                    onSelect(FileSelectionModifiers())
                     onOpen()
                 },
             )
@@ -1117,7 +1227,6 @@ private fun FileEntryTableRow(
             .combinedClickable(
                 onClick = { onSelect(clickModifiers) },
                 onDoubleClick = {
-                    onSelect(FileSelectionModifiers())
                     if (entry.isBrowseable) {
                         onOpen(entry)
                     }
@@ -1342,6 +1451,12 @@ private fun SettingsSection(services: AppServices) {
         BackupSettings(
             mode = settings.backupMode,
             onModeChange = services.settings::updateBackupMode,
+        )
+        HorizontalDivider()
+        RemoteDeleteSettings(
+            policy = settings.remoteDeletePolicy,
+            supportsTrash = services.platform.fileSystem.supportsTrash,
+            onPolicyChange = services.settings::updateRemoteDeletePolicy,
         )
         HorizontalDivider()
         BackupArchiveSettings(
@@ -1573,6 +1688,62 @@ private fun BackupModeButton(
 }
 
 @Composable
+private fun RemoteDeleteSettings(
+    policy: RemoteDeletePolicy,
+    supportsTrash: Boolean,
+    onPolicyChange: (RemoteDeletePolicy) -> Unit,
+) {
+    SectionColumn(title = stringResource(Res.string.remote_delete_policy)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RemoteDeletePolicyButton(
+                policy = RemoteDeletePolicy.DoNothing,
+                label = stringResource(Res.string.delete_policy_none),
+                selectedPolicy = policy,
+                onPolicyChange = onPolicyChange,
+            )
+            RemoteDeletePolicyButton(
+                policy = RemoteDeletePolicy.Ask,
+                label = stringResource(Res.string.delete_policy_ask),
+                selectedPolicy = policy,
+                onPolicyChange = onPolicyChange,
+            )
+            if (supportsTrash) {
+                RemoteDeletePolicyButton(
+                    policy = RemoteDeletePolicy.Trash,
+                    label = stringResource(Res.string.delete_policy_trash),
+                    selectedPolicy = policy,
+                    onPolicyChange = onPolicyChange,
+                )
+            }
+            RemoteDeletePolicyButton(
+                policy = RemoteDeletePolicy.Permanent,
+                label = stringResource(Res.string.delete_policy_permanent),
+                selectedPolicy = policy,
+                onPolicyChange = onPolicyChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemoteDeletePolicyButton(
+    policy: RemoteDeletePolicy,
+    label: String,
+    selectedPolicy: RemoteDeletePolicy,
+    onPolicyChange: (RemoteDeletePolicy) -> Unit,
+) {
+    if (policy == selectedPolicy) {
+        Button(onClick = { onPolicyChange(policy) }) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = { onPolicyChange(policy) }) {
+            Text(label)
+        }
+    }
+}
+
+@Composable
 private fun BackupArchiveSettings(
     records: List<com.dimonoso.crosplatformfilesender.backup.BackupRecord>,
     onRestore: (com.dimonoso.crosplatformfilesender.backup.BackupRecord) -> Unit,
@@ -1634,7 +1805,11 @@ private fun WhitelistSettings(
             whitelist.forEach { folder ->
                 WhitelistRow(
                     folder = folder,
+                    canMoveFolderToTrash = services.platform.fileSystem.canMoveToTrash(folder.path),
                     onEnabledChange = { enabled -> services.fileSystem.setWhitelistEnabled(folder.id, enabled) },
+                    onDeletePolicyChange = { deletePolicy ->
+                        services.fileSystem.setWhitelistDeletePolicyOverride(folder.id, deletePolicy)
+                    },
                     onRemove = { services.fileSystem.removeWhitelistFolder(folder.id) },
                 )
             }
@@ -1810,7 +1985,9 @@ private fun fileEntryTypeLabel(type: FileEntryType): String =
 @Composable
 private fun WhitelistRow(
     folder: WhitelistFolder,
+    canMoveFolderToTrash: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onDeletePolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
     onRemove: () -> Unit,
 ) {
     RowSurface {
@@ -1823,6 +2000,40 @@ private fun WhitelistRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                WhitelistDeletePolicyButton(
+                    policy = WhitelistDeletePolicyOverride.UseDefault,
+                    label = stringResource(Res.string.delete_policy_default),
+                    selectedPolicy = folder.deletePolicyOverride,
+                    onPolicyChange = onDeletePolicyChange,
+                )
+                WhitelistDeletePolicyButton(
+                    policy = WhitelistDeletePolicyOverride.DoNothing,
+                    label = stringResource(Res.string.delete_policy_none),
+                    selectedPolicy = folder.deletePolicyOverride,
+                    onPolicyChange = onDeletePolicyChange,
+                )
+                WhitelistDeletePolicyButton(
+                    policy = WhitelistDeletePolicyOverride.Ask,
+                    label = stringResource(Res.string.delete_policy_ask),
+                    selectedPolicy = folder.deletePolicyOverride,
+                    onPolicyChange = onDeletePolicyChange,
+                )
+                if (canMoveFolderToTrash) {
+                    WhitelistDeletePolicyButton(
+                        policy = WhitelistDeletePolicyOverride.Trash,
+                        label = stringResource(Res.string.delete_policy_trash),
+                        selectedPolicy = folder.deletePolicyOverride,
+                        onPolicyChange = onDeletePolicyChange,
+                    )
+                }
+                WhitelistDeletePolicyButton(
+                    policy = WhitelistDeletePolicyOverride.Permanent,
+                    label = stringResource(Res.string.delete_policy_permanent),
+                    selectedPolicy = folder.deletePolicyOverride,
+                    onPolicyChange = onDeletePolicyChange,
+                )
+            }
         }
         Switch(
             checked = folder.enabled,
@@ -1832,6 +2043,76 @@ private fun WhitelistRow(
             Text(stringResource(Res.string.remove))
         }
     }
+}
+
+@Composable
+private fun WhitelistDeletePolicyButton(
+    policy: WhitelistDeletePolicyOverride,
+    label: String,
+    selectedPolicy: WhitelistDeletePolicyOverride,
+    onPolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
+) {
+    if (policy == selectedPolicy) {
+        Button(onClick = { onPolicyChange(policy) }) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = { onPolicyChange(policy) }) {
+            Text(label)
+        }
+    }
+}
+
+@Composable
+private fun PendingRemoteDeleteDialog(services: AppServices) {
+    val prompt by services.remoteFileCatalog.pendingDeletePrompt.collectAsState()
+    val pending = prompt ?: return
+
+    AlertDialog(
+        onDismissRequest = {
+            services.remoteFileCatalog.resolvePendingDeletePrompt(pending.id, RemoteDeletePromptDecision.Cancel)
+        },
+        title = { Text(stringResource(Res.string.remote_delete_prompt_title)) },
+        text = { Text(stringResource(Res.string.remote_delete_prompt_message, pending.paths.size.toString())) },
+        confirmButton = {
+            Button(
+                onClick = {
+                    services.remoteFileCatalog.resolvePendingDeletePrompt(
+                        pending.id,
+                        RemoteDeletePromptDecision.Permanent,
+                    )
+                },
+            ) {
+                Text(stringResource(Res.string.delete_policy_permanent))
+            }
+        },
+        dismissButton = {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (pending.canMoveAllToTrash) {
+                    OutlinedButton(
+                        onClick = {
+                            services.remoteFileCatalog.resolvePendingDeletePrompt(
+                                pending.id,
+                                RemoteDeletePromptDecision.Trash,
+                            )
+                        },
+                    ) {
+                        Text(stringResource(Res.string.delete_policy_trash))
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        services.remoteFileCatalog.resolvePendingDeletePrompt(
+                            pending.id,
+                            RemoteDeletePromptDecision.Cancel,
+                        )
+                    },
+                ) {
+                    Text(stringResource(Res.string.cancel))
+                }
+            }
+        },
+    )
 }
 
 @Composable

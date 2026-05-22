@@ -1,5 +1,7 @@
 package com.dimonoso.crosplatformfilesender.settings
 
+import com.dimonoso.crosplatformfilesender.filesystem.RemoteDeletePolicy
+import com.dimonoso.crosplatformfilesender.filesystem.WhitelistDeletePolicyOverride
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -125,6 +127,43 @@ class SettingsConfigCodecTest {
         assertEquals(1, decoded.maxOutgoingTransfers)
         assertEquals(16, decoded.maxIncomingTransfers)
         assertEquals(BackupMode.BackupFolder, decoded.backupMode)
+    }
+
+    @Test
+    fun deletePoliciesRoundTripThroughSettings() {
+        val settings = AppSettings(
+            localDeviceId = "device-delete-test",
+            discoveryKeyword = "local-secret",
+            remoteDeletePolicy = RemoteDeletePolicy.Ask,
+            whitelistFolders = listOf(
+                WhitelistFolder(
+                    id = "folder-delete-test",
+                    displayName = "Downloads",
+                    path = "/downloads",
+                    deletePolicyOverride = WhitelistDeletePolicyOverride.Permanent,
+                ),
+            ),
+        )
+
+        val decoded = SettingsConfigCodec.decode(SettingsConfigCodec.encode(settings))
+
+        assertEquals(settings, decoded)
+    }
+
+    @Test
+    fun deletePoliciesFallBackToSafeDefaultsWhenMissingOrInvalid() {
+        val decoded = SettingsConfigCodec.decode(
+            """
+            discovery.keyword=local-secret
+            delete.remote=invalid
+            whitelist.count=1
+            whitelist.0.path=/shared
+            whitelist.0.deletePolicy=invalid
+            """.trimIndent(),
+        )
+
+        assertEquals(RemoteDeletePolicy.DoNothing, decoded.remoteDeletePolicy)
+        assertEquals(WhitelistDeletePolicyOverride.UseDefault, decoded.whitelistFolders.single().deletePolicyOverride)
     }
 
     @Test

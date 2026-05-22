@@ -27,7 +27,7 @@ private class AndroidRemoteFileCatalogTransport : RemoteFileCatalogTransport {
     ): RemoteFileCatalogResponse =
         withContext(Dispatchers.IO) {
             Socket().use { socket ->
-                socket.soTimeout = ReadTimeoutMillis
+                socket.soTimeout = request.readTimeoutMillis()
                 socket.connect(InetSocketAddress(host, port), ConnectTimeoutMillis)
 
                 val writer = socket.writer()
@@ -123,3 +123,7 @@ private fun Throwable.readableMessage(): String =
 
 private const val ConnectTimeoutMillis = 3_000
 private const val ReadTimeoutMillis = 5_000
+private const val DeleteReadTimeoutMillis = 65_000
+
+private fun RemoteFileCatalogRequest.readTimeoutMillis(): Int =
+    if (operation == RemoteFileCatalogOperation.Delete) DeleteReadTimeoutMillis else ReadTimeoutMillis

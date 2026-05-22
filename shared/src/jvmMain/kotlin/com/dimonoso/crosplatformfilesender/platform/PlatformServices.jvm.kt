@@ -2,6 +2,7 @@ package com.dimonoso.crosplatformfilesender.platform
 
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
+import java.awt.Desktop
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -28,6 +29,11 @@ actual fun createPlatformServices(): PlatformServices {
 
 private class JvmPlatformFileSystem : PlatformFileSystem {
     override val accessPolicy: FileSystemAccessPolicy = FileSystemAccessPolicy.FullFileSystem
+
+    override val supportsTrash: Boolean
+        get() = runCatching {
+            Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.MOVE_TO_TRASH)
+        }.getOrDefault(false)
 
     override fun roots(): List<FileEntry> =
         File.listRoots().map { root ->
@@ -94,6 +100,15 @@ private class JvmPlatformFileSystem : PlatformFileSystem {
             true
         }.getOrDefault(false)
     }
+
+    override fun canMoveToTrash(path: String): Boolean =
+        supportsTrash && File(path).exists()
+
+    override fun moveToTrash(path: String): Boolean =
+        runCatching {
+            val file = File(path)
+            !file.exists() || canMoveToTrash(path) && Desktop.getDesktop().moveToTrash(file)
+        }.getOrDefault(false)
 
     override fun delete(path: String, recursive: Boolean): Boolean {
         val file = File(path)

@@ -72,6 +72,17 @@
     <string name="backup_folder">Бекапити папку</string>
     <string name="backup_archives">Архіви бекапів</string>
     <string name="backup_empty">Архівів бекапів немає</string>
+    <string name="remote_delete_policy">Запити на віддалене видалення</string>
+    <string name="delete_policy_default">За замовчуванням</string>
+    <string name="delete_policy_none">Нічого не робити</string>
+    <string name="delete_policy_ask">Питати</string>
+    <string name="delete_policy_trash">Перемістити в корзину</string>
+    <string name="delete_policy_permanent">Видалити повністю</string>
+    <string name="local_delete_title">Перемістити в корзину?</string>
+    <string name="local_delete_message">Перемістити вибрані файли та папки в корзину?</string>
+    <string name="remote_delete_prompt_title">Запит на віддалене видалення</string>
+    <string name="remote_delete_prompt_message">Інший пристрій запросив видалення вибраних елементів: %1$s.</string>
+    <string name="delete_problem">Видалення не завершено:</string>
     <string name="restore">Відновити</string>
     <string name="delete">Видалити</string>
     <string name="task_error">Помилка: %1$s</string>

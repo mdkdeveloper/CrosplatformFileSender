@@ -1,5 +1,8 @@
 package com.dimonoso.crosplatformfilesender.remote
 
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteBatchResult
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteResult
+import com.dimonoso.crosplatformfilesender.filesystem.FileDeleteStatus
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 
@@ -14,17 +17,47 @@ internal object RemoteFileCatalogProtocol {
             appendLine(Header)
             appendLine("type=$RequestType")
             appendLine("keywordFingerprint=${request.keywordFingerprint.escapeWireValue()}")
-            appendLine("path=${(request.path ?: EmptyPath).escapeWireValue()}")
+            appendLine("operation=${request.operation.name}")
+            when (request.operation) {
+                RemoteFileCatalogOperation.Browse -> {
+                    appendLine("path=${(request.path ?: EmptyPath).escapeWireValue()}")
+                }
+                RemoteFileCatalogOperation.Delete -> {
+                    appendLine("count=${request.deletePaths.size}")
+                    request.deletePaths.forEachIndexed { index, path ->
+                        appendLine("path.$index=${path.escapeWireValue()}")
+                    }
+                }
+            }
             appendLine()
         }
 
     fun decodeRequest(payload: String): RemoteFileCatalogRequest? {
         val fields = payload.decodeFields(expectedType = RequestType) ?: return null
-        val encodedPath = fields["path"] ?: return null
-        return RemoteFileCatalogRequest(
-            keywordFingerprint = fields["keywordFingerprint"]?.takeIf { it.isNotBlank() } ?: return null,
-            path = encodedPath.takeUnless { it == EmptyPath },
-        )
+        val keywordFingerprint = fields["keywordFingerprint"]?.takeIf { it.isNotBlank() } ?: return null
+        val operation = fields["operation"]
+            ?.let { value -> RemoteFileCatalogOperation.entries.firstOrNull { it.name == value } }
+            ?: RemoteFileCatalogOperation.Browse
+        return when (operation) {
+            RemoteFileCatalogOperation.Browse -> {
+                val encodedPath = fields["path"] ?: return null
+                RemoteFileCatalogRequest(
+                    keywordFingerprint = keywordFingerprint,
+                    path = encodedPath.takeUnless { it == EmptyPath },
+                )
+            }
+            RemoteFileCatalogOperation.Delete -> {
+                val count = fields["count"]?.toIntOrNull()?.coerceAtLeast(0) ?: return null
+                val paths = (0 until count).map { index ->
+                    fields["path.$index"]?.takeIf { it.isNotBlank() } ?: return null
+                }
+                RemoteFileCatalogRequest(
+                    keywordFingerprint = keywordFingerprint,
+                    operation = RemoteFileCatalogOperation.Delete,
+                    deletePaths = paths,
+                )
+            }
+        }
     }
 
     fun encodeResponse(response: RemoteFileCatalogResponse): String =
@@ -42,6 +75,16 @@ internal object RemoteFileCatalogProtocol {
                         appendLine("$prefix.type=${entry.type.name}")
                         appendLine("$prefix.size=${entry.sizeBytes?.toString().orEmpty().escapeWireValue()}")
                         appendLine("$prefix.browseable=${entry.isBrowseable}")
+                    }
+                }
+                is RemoteFileCatalogResponse.DeleteCompleted -> {
+                    appendLine("status=deleted")
+                    appendLine("count=${response.result.results.size}")
+                    response.result.results.forEachIndexed { index, result ->
+                        val prefix = "result.$index"
+                        appendLine("$prefix.path=${result.path.escapeWireValue()}")
+                        appendLine("$prefix.status=${result.status.name}")
+                        appendLine("$prefix.message=${result.message.escapeWireValue()}")
                     }
                 }
                 is RemoteFileCatalogResponse.Failure -> {
@@ -70,6 +113,18 @@ internal object RemoteFileCatalogProtocol {
                     )
                 }
                 RemoteFileCatalogResponse.Success(entries)
+            }
+            "deleted" -> {
+                val count = fields["count"]?.toIntOrNull()?.coerceAtLeast(0) ?: return null
+                val results = (0 until count).map { index ->
+                    val prefix = "result.$index"
+                    FileDeleteResult(
+                        path = fields["$prefix.path"]?.takeIf { it.isNotBlank() } ?: return null,
+                        status = fields["$prefix.status"]?.let(::decodeDeleteStatus) ?: return null,
+                        message = fields["$prefix.message"].orEmpty(),
+                    )
+                }
+                RemoteFileCatalogResponse.DeleteCompleted(FileDeleteBatchResult(results))
             }
             "error" -> {
                 val code = fields["code"]?.let(::decodeErrorCode) ?: RemoteFileCatalogErrorCode.BadRequest
@@ -109,6 +164,9 @@ internal object RemoteFileCatalogProtocol {
 
     private fun decodeErrorCode(value: String): RemoteFileCatalogErrorCode? =
         RemoteFileCatalogErrorCode.entries.firstOrNull { it.name == value }
+
+    private fun decodeDeleteStatus(value: String): FileDeleteStatus? =
+        FileDeleteStatus.entries.firstOrNull { it.name == value }
 }
 
 private fun String.escapeWireValue(): String =

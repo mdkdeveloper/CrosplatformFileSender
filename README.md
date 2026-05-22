@@ -21,6 +21,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Refresh open file panes after successful in-app transfers.
 - Limit parallel incoming and outgoing transfers.
 - Share only selected folders through the whitelist.
+- Delete selected local or remote file-browser items with the `Delete` key using local confirmation and remote whitelist policies.
 - Archive folders before transfer when needed.
 - Keep backup archives for received or replaced files, depending on the selected backup mode.
 - Switch between system language, English, and Ukrainian.
@@ -111,7 +112,8 @@ Useful output locations:
 7. Open a destination folder in the receiving file pane. The root view is not a transfer destination.
 8. Use Send selected or Download selected, or drag files and folders between the local and remote panes.
 9. In the desktop app, you can also drop files and folders from the system file manager into the remote pane to send them.
-10. Open the transfer queue to pause, resume, cancel, or check progress.
+10. Select file-browser items and press `Delete` to request deletion from the active pane.
+11. Open the transfer queue to pause, resume, cancel, or check progress.
 
 ## Sharing and safety notes
 
@@ -120,6 +122,10 @@ Only whitelisted folders are exposed to other devices. If no whitelist folder is
 The discovery keyword is used to match devices on the LAN. Devices with different keywords ignore each other's discovery messages and remote file requests.
 
 When receiving files, the backup setting controls whether existing files or folders are archived before being replaced. Backup archives can be restored or deleted from Settings.
+
+Local file-browser deletions always ask first and only move items to the system trash when the current platform and path support it. Whitelist folder roots are protected from deletion.
+
+Remote deletion requests are disabled by default. Settings can allow the owner device to ask before deleting, move allowed items to trash, or delete them permanently, and each whitelist folder can override that default. Nested whitelist overrides use the closest enabled whitelist folder that specifies a delete policy.
 
 ## Troubleshooting
 

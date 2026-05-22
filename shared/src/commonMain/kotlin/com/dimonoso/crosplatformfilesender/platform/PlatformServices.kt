@@ -29,6 +29,9 @@ data class NetworkPermissionState(
 interface PlatformFileSystem {
     val accessPolicy: FileSystemAccessPolicy
 
+    val supportsTrash: Boolean
+        get() = false
+
     fun roots(): List<FileEntry>
 
     fun list(path: String): List<FileEntry>
@@ -54,6 +57,10 @@ interface PlatformFileSystem {
         error("Write streams are not available for this platform filesystem.")
 
     fun move(sourcePath: String, targetPath: String, replace: Boolean = true): Boolean = false
+
+    fun canMoveToTrash(path: String): Boolean = false
+
+    fun moveToTrash(path: String): Boolean = false
 
     fun delete(path: String, recursive: Boolean = false): Boolean = false
 

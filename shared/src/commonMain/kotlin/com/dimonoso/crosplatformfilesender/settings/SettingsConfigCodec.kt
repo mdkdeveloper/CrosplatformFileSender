@@ -1,5 +1,7 @@
 package com.dimonoso.crosplatformfilesender.settings
 
+import com.dimonoso.crosplatformfilesender.filesystem.RemoteDeletePolicy
+import com.dimonoso.crosplatformfilesender.filesystem.WhitelistDeletePolicyOverride
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 
 internal object SettingsConfigCodec {
@@ -11,6 +13,7 @@ internal object SettingsConfigCodec {
     private const val MaxOutgoingTransfersKey = "transfer.maxOutgoing"
     private const val MaxIncomingTransfersKey = "transfer.maxIncoming"
     private const val BackupModeKey = "backup.mode"
+    private const val RemoteDeletePolicyKey = "delete.remote"
 
     fun encode(settings: AppSettings): String =
         buildString {
@@ -22,12 +25,14 @@ internal object SettingsConfigCodec {
             appendLine("$MaxOutgoingTransfersKey=${settings.maxOutgoingTransfers.normalizeTransferLimit()}")
             appendLine("$MaxIncomingTransfersKey=${settings.maxIncomingTransfers.normalizeTransferLimit()}")
             appendLine("$BackupModeKey=${settings.backupMode.configValue}")
+            appendLine("$RemoteDeletePolicyKey=${settings.remoteDeletePolicy.configValue}")
             appendLine("$WhitelistCountKey=${settings.whitelistFolders.size}")
             settings.whitelistFolders.forEachIndexed { index, folder ->
                 appendLine("whitelist.$index.id=${folder.id.escapeConfigValue()}")
                 appendLine("whitelist.$index.displayName=${folder.displayName.escapeConfigValue()}")
                 appendLine("whitelist.$index.path=${folder.path.escapeConfigValue()}")
                 appendLine("whitelist.$index.enabled=${folder.enabled}")
+                appendLine("whitelist.$index.deletePolicy=${folder.deletePolicyOverride.configValue}")
             }
         }
 
@@ -64,6 +69,7 @@ internal object SettingsConfigCodec {
             ?.normalizeTransferLimit()
             ?: DefaultMaxParallelTransfers
         val backupMode = BackupMode.fromConfigValue(properties[BackupModeKey])
+        val remoteDeletePolicy = RemoteDeletePolicy.fromConfigValue(properties[RemoteDeletePolicyKey])
         val whitelistCount = properties[WhitelistCountKey]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val folders = (0 until whitelistCount).mapNotNull { index ->
             val prefix = "whitelist.$index"
@@ -73,6 +79,7 @@ internal object SettingsConfigCodec {
                 displayName = properties["$prefix.displayName"]?.takeIf { it.isNotBlank() } ?: path,
                 path = path,
                 enabled = properties["$prefix.enabled"]?.toBooleanStrictOrNull() ?: true,
+                deletePolicyOverride = WhitelistDeletePolicyOverride.fromConfigValue(properties["$prefix.deletePolicy"]),
             )
         }
 
@@ -85,6 +92,7 @@ internal object SettingsConfigCodec {
             maxOutgoingTransfers = maxOutgoingTransfers,
             maxIncomingTransfers = maxIncomingTransfers,
             backupMode = backupMode,
+            remoteDeletePolicy = remoteDeletePolicy,
         )
     }
 }

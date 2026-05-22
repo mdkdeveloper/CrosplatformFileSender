@@ -1,5 +1,6 @@
 package com.dimonoso.crosplatformfilesender.settings
 
+import com.dimonoso.crosplatformfilesender.filesystem.RemoteDeletePolicy
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,7 @@ data class AppSettings(
     val maxOutgoingTransfers: Int = DefaultMaxParallelTransfers,
     val maxIncomingTransfers: Int = DefaultMaxParallelTransfers,
     val backupMode: BackupMode = BackupMode.BackupFolder,
+    val remoteDeletePolicy: RemoteDeletePolicy = RemoteDeletePolicy.DoNothing,
 )
 
 interface SettingsService {
@@ -50,6 +52,8 @@ interface SettingsService {
     fun updateMaxIncomingTransfers(value: Int)
 
     fun updateBackupMode(mode: BackupMode)
+
+    fun updateRemoteDeletePolicy(policy: RemoteDeletePolicy)
 }
 
 fun isDiscoveryKeywordChar(char: Char): Boolean =
@@ -109,6 +113,10 @@ internal class PersistentSettingsService(
 
     override fun updateBackupMode(mode: BackupMode) {
         replace(_settings.value.copy(backupMode = mode))
+    }
+
+    override fun updateRemoteDeletePolicy(policy: RemoteDeletePolicy) {
+        replace(_settings.value.copy(remoteDeletePolicy = policy))
     }
 
     private fun loadSettings(): AppSettings {

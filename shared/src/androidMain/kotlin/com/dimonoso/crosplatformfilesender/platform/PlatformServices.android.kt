@@ -37,6 +37,9 @@ private class AndroidPlatformFileSystem(
 ) : PlatformFileSystem {
     override val accessPolicy: FileSystemAccessPolicy = FileSystemAccessPolicy.ScopedStorage
 
+    override val supportsTrash: Boolean
+        get() = hasTrashDocumentMethod()
+
     override fun roots(): List<FileEntry> =
         listOf(
             FileEntry(
@@ -191,6 +194,23 @@ private class AndroidPlatformFileSystem(
         }.getOrDefault(false)
     }
 
+    override fun canMoveToTrash(path: String): Boolean {
+        if (!path.isContentPath()) return false
+        val flags = documentFlags(path) ?: return false
+        return flags and SupportsTrashFlag != 0L && hasTrashDocumentMethod()
+    }
+
+    override fun moveToTrash(path: String): Boolean {
+        if (!canMoveToTrash(path)) return false
+        val resolver = context?.contentResolver ?: return false
+        val uri = resolveExistingUri(path) ?: return false
+        return runCatching {
+            DocumentsContract::class.java
+                .getMethod("trashDocument", android.content.ContentResolver::class.java, Uri::class.java)
+                .invoke(null, resolver, uri) != null
+        }.getOrDefault(false)
+    }
+
     override fun delete(path: String, recursive: Boolean): Boolean {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.delete(path, recursive)
         val resolver = context?.contentResolver ?: return false
@@ -239,9 +259,37 @@ private class AndroidPlatformFileSystem(
         }
         return resolveExistingUri(path)
     }
+
+    private fun documentFlags(path: String): Long? {
+        val resolver = context?.contentResolver ?: return null
+        val uri = resolveExistingUri(path) ?: return null
+        return runCatching {
+            resolver.query(
+                uri,
+                arrayOf(DocumentsContract.Document.COLUMN_FLAGS),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val flagsIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_FLAGS)
+                cursor.getLong(flagsIndex)
+            }
+        }.getOrNull()
+    }
+
+    private fun hasTrashDocumentMethod(): Boolean =
+        runCatching {
+            DocumentsContract::class.java.getMethod(
+                "trashDocument",
+                android.content.ContentResolver::class.java,
+                Uri::class.java,
+            )
+        }.isSuccess
 }
 
 private const val SyntheticChildMarker = "#cfs-child="
+private const val SupportsTrashFlag = 65_536L
 
 private data class SyntheticChild(
     val parentPath: String,

@@ -44,6 +44,7 @@
     <string name="persistence">Persistence</string>
     <string name="device_name">Device name</string>
     <string name="keyword">Keyword</string>
+    <string name="auto_search_devices_on_startup">Search devices on startup</string>
     <string name="keyword_allowed_template">Allowed: %1$s</string>
     <string name="keyword_allowed_characters">letters, digits, _ - . , &quot; &amp; $</string>
     <string name="save">Save</string>

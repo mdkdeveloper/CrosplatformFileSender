@@ -44,6 +44,7 @@
     <string name="persistence">Збереження</string>
     <string name="device_name">Назва пристрою</string>
     <string name="keyword">Ключове слово</string>
+    <string name="auto_search_devices_on_startup">Шукати пристрої при запуску</string>
     <string name="keyword_allowed_template">Дозволено: %1$s</string>
     <string name="keyword_allowed_characters">букви, цифри, _ - . , &quot; &amp; $</string>
     <string name="save">Зберегти</string>

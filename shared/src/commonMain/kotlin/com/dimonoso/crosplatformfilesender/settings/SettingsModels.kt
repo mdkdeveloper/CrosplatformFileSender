@@ -28,6 +28,7 @@ data class AppSettings(
     val localDeviceId: String = createLocalDeviceId(),
     val deviceDisplayName: String = "",
     val discoveryKeyword: String = DefaultDiscoveryKeyword,
+    val autoSearchDevicesOnStartup: Boolean = false,
     val whitelistFolders: List<WhitelistFolder> = emptyList(),
     val languageMode: AppLanguageMode = AppLanguageMode.System,
     val maxOutgoingTransfers: Int = DefaultMaxParallelTransfers,
@@ -42,6 +43,8 @@ interface SettingsService {
     fun updateDeviceDisplayName(name: String): Boolean
 
     fun updateDiscoveryKeyword(keyword: String): Boolean
+
+    fun updateAutoSearchDevicesOnStartup(enabled: Boolean)
 
     fun updateWhitelistFolders(folders: List<WhitelistFolder>)
 
@@ -93,6 +96,10 @@ internal class PersistentSettingsService(
 
         replace(_settings.value.copy(discoveryKeyword = normalized))
         return true
+    }
+
+    override fun updateAutoSearchDevicesOnStartup(enabled: Boolean) {
+        replace(_settings.value.copy(autoSearchDevicesOnStartup = enabled))
     }
 
     override fun updateWhitelistFolders(folders: List<WhitelistFolder>) {

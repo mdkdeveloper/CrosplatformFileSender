@@ -108,6 +108,7 @@ import crosplatformfilesender.shared.generated.resources.archive_download_messag
 import crosplatformfilesender.shared.generated.resources.archive_download_title
 import crosplatformfilesender.shared.generated.resources.archive_no
 import crosplatformfilesender.shared.generated.resources.archive_yes
+import crosplatformfilesender.shared.generated.resources.auto_search_devices_on_startup
 import crosplatformfilesender.shared.generated.resources.backup_archives
 import crosplatformfilesender.shared.generated.resources.backup_empty
 import crosplatformfilesender.shared.generated.resources.backup_file
@@ -217,6 +218,17 @@ fun App() {
     val resolvedLanguage = resolveAppLanguage(settings.languageMode, systemLanguageCode)
     var showQueueDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(services) {
+        val startupSettings = services.settings.settings.value
+        if (startupSettings.autoSearchDevicesOnStartup) {
+            startLocalDiscovery(
+                services = services,
+                keyword = startupSettings.discoveryKeyword,
+                deviceDisplayName = startupSettings.deviceDisplayNameOr(services.platform.deviceInfo.displayName),
+            )
+        }
+    }
 
     AppLocaleEnvironment(resolvedLanguage.localeTag) {
         MaterialTheme {
@@ -1441,6 +1453,11 @@ private fun SettingsSection(services: AppServices) {
             },
         )
         HorizontalDivider()
+        AutoSearchDevicesOnStartupSettings(
+            enabled = settings.autoSearchDevicesOnStartup,
+            onEnabledChange = services.settings::updateAutoSearchDevicesOnStartup,
+        )
+        HorizontalDivider()
         TransferSettings(
             maxOutgoing = settings.maxOutgoingTransfers,
             maxIncoming = settings.maxIncomingTransfers,
@@ -1609,6 +1626,24 @@ private fun KeywordSettings(
                 Text(stringResource(Res.string.cancel))
             }
         }
+    }
+}
+
+@Composable
+private fun AutoSearchDevicesOnStartupSettings(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    RowSurface {
+        Text(
+            text = stringResource(Res.string.auto_search_devices_on_startup),
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Switch(
+            checked = enabled,
+            onCheckedChange = onEnabledChange,
+        )
     }
 }
 

@@ -11,6 +11,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 ## Main features
 
 - Discover nearby devices over UDP on the local network.
+- Optionally start device discovery automatically when the app opens.
 - Pair devices by using the same discovery keyword.
 - Browse local files and the remote device's shared folders.
 - Send selected files to another device.
@@ -105,7 +106,7 @@ Useful output locations:
 
 1. Run the app on at least two devices on the same LAN.
 2. Open Settings on each device and set the same discovery keyword.
-3. Start discovery from the Files screen.
+3. Start discovery from the Files screen, or enable automatic startup discovery in Settings.
 4. Add one or more whitelist folders on the device that should expose files.
 5. Select a discovered device.
 6. Browse local files and remote files.

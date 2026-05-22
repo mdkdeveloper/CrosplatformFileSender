@@ -97,6 +97,23 @@ class SettingsConfigCodecTest {
     }
 
     @Test
+    fun startupDeviceSearchRoundTripKeepsDefaultAndEnabledValues() {
+        assertFalse(SettingsConfigCodec.decode("discovery.keyword=local-secret").autoSearchDevicesOnStartup)
+
+        val decoded = SettingsConfigCodec.decode(
+            SettingsConfigCodec.encode(
+                AppSettings(
+                    localDeviceId = "device-auto-search-test",
+                    discoveryKeyword = "local-secret",
+                    autoSearchDevicesOnStartup = true,
+                ),
+            ),
+        )
+
+        assertTrue(decoded.autoSearchDevicesOnStartup)
+    }
+
+    @Test
     fun transferSettingsRoundTripKeepsConcurrencyAndBackupMode() {
         val settings = AppSettings(
             localDeviceId = "device-transfer-test",
@@ -227,6 +244,17 @@ class SettingsConfigCodecTest {
 
         val decoded = SettingsConfigCodec.decode(store.contents.orEmpty())
         assertEquals(AppLanguageMode.English, decoded.languageMode)
+    }
+
+    @Test
+    fun settingsServicePersistsStartupDeviceSearchChanges() {
+        val store = InMemorySettingsStore(null)
+        val service = PersistentSettingsService(store)
+
+        service.updateAutoSearchDevicesOnStartup(enabled = true)
+
+        val decoded = SettingsConfigCodec.decode(store.contents.orEmpty())
+        assertTrue(decoded.autoSearchDevicesOnStartup)
     }
 
     @Test

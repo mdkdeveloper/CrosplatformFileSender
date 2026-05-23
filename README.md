@@ -105,6 +105,7 @@ Useful output locations:
 - macOS DMG: `desktopApp/build/compose/binaries/main/dmg/`
 
 macOS DMG builds must be run on macOS with a full JDK that includes `jpackage` and `jlink`.
+On macOS, check Java with `java -version` and list installed JDKs with `/usr/libexec/java_home -V`.
 
 ## Basic usage
 

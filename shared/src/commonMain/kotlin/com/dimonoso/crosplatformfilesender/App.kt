@@ -173,7 +173,6 @@ import crosplatformfilesender.shared.generated.resources.remote_error_unknown
 import crosplatformfilesender.shared.generated.resources.remote_delete_policy
 import crosplatformfilesender.shared.generated.resources.remote_delete_prompt_message
 import crosplatformfilesender.shared.generated.resources.remote_delete_prompt_title
-import crosplatformfilesender.shared.generated.resources.remove
 import crosplatformfilesender.shared.generated.resources.request_download
 import crosplatformfilesender.shared.generated.resources.resume
 import crosplatformfilesender.shared.generated.resources.restore
@@ -2018,83 +2017,42 @@ private fun fileEntryTypeLabel(type: FileEntryType): String =
     }
 
 @Composable
-private fun WhitelistRow(
+internal expect fun WhitelistRow(
     folder: WhitelistFolder,
     canMoveFolderToTrash: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onDeletePolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
     onRemove: () -> Unit,
+)
+
+@Composable
+internal fun WhitelistDeletePolicyButton(
+    policy: WhitelistDeletePolicyOverride,
+    label: String,
+    selectedPolicy: WhitelistDeletePolicyOverride,
+    onPolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
+    singleLineLabel: Boolean = false,
 ) {
-    RowSurface {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(folder.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                text = folder.path,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                WhitelistDeletePolicyButton(
-                    policy = WhitelistDeletePolicyOverride.UseDefault,
-                    label = stringResource(Res.string.delete_policy_default),
-                    selectedPolicy = folder.deletePolicyOverride,
-                    onPolicyChange = onDeletePolicyChange,
-                )
-                WhitelistDeletePolicyButton(
-                    policy = WhitelistDeletePolicyOverride.DoNothing,
-                    label = stringResource(Res.string.delete_policy_none),
-                    selectedPolicy = folder.deletePolicyOverride,
-                    onPolicyChange = onDeletePolicyChange,
-                )
-                WhitelistDeletePolicyButton(
-                    policy = WhitelistDeletePolicyOverride.Ask,
-                    label = stringResource(Res.string.delete_policy_ask),
-                    selectedPolicy = folder.deletePolicyOverride,
-                    onPolicyChange = onDeletePolicyChange,
-                )
-                if (canMoveFolderToTrash) {
-                    WhitelistDeletePolicyButton(
-                        policy = WhitelistDeletePolicyOverride.Trash,
-                        label = stringResource(Res.string.delete_policy_trash),
-                        selectedPolicy = folder.deletePolicyOverride,
-                        onPolicyChange = onDeletePolicyChange,
-                    )
-                }
-                WhitelistDeletePolicyButton(
-                    policy = WhitelistDeletePolicyOverride.Permanent,
-                    label = stringResource(Res.string.delete_policy_permanent),
-                    selectedPolicy = folder.deletePolicyOverride,
-                    onPolicyChange = onDeletePolicyChange,
-                )
-            }
+    if (policy == selectedPolicy) {
+        Button(onClick = { onPolicyChange(policy) }) {
+            WhitelistDeletePolicyButtonLabel(label, singleLineLabel)
         }
-        Switch(
-            checked = folder.enabled,
-            onCheckedChange = onEnabledChange,
-        )
-        TextButton(onClick = onRemove) {
-            Text(stringResource(Res.string.remove))
+    } else {
+        OutlinedButton(onClick = { onPolicyChange(policy) }) {
+            WhitelistDeletePolicyButtonLabel(label, singleLineLabel)
         }
     }
 }
 
 @Composable
-private fun WhitelistDeletePolicyButton(
-    policy: WhitelistDeletePolicyOverride,
+private fun WhitelistDeletePolicyButtonLabel(
     label: String,
-    selectedPolicy: WhitelistDeletePolicyOverride,
-    onPolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
+    singleLineLabel: Boolean,
 ) {
-    if (policy == selectedPolicy) {
-        Button(onClick = { onPolicyChange(policy) }) {
-            Text(label)
-        }
+    if (singleLineLabel) {
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     } else {
-        OutlinedButton(onClick = { onPolicyChange(policy) }) {
-            Text(label)
-        }
+        Text(label)
     }
 }
 
@@ -2229,7 +2187,7 @@ private fun transferStatusLabel(status: TransferStatus): String =
     }
 
 @Composable
-private fun RowSurface(content: @Composable RowScope.() -> Unit) {
+internal fun RowSurface(content: @Composable RowScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),

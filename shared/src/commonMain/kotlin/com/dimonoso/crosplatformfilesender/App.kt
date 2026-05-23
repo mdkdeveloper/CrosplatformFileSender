@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -57,6 +58,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
@@ -982,10 +985,15 @@ private fun FileBrowserPane(
     topRowContent: @Composable () -> Unit = {},
 ) {
     var isDropTargetHovered by remember(side) { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
     val latestDragPayload = rememberUpdatedState(activeDragPayload)
     val latestOnDragEnded = rememberUpdatedState(onDragEnded)
     val latestOnDrop = rememberUpdatedState(onDrop)
     val latestOnExternalDrop = rememberUpdatedState(onExternalDrop)
+    val onFocusedSelectionChange: (FileBrowserSelection) -> Unit = { newSelection ->
+        focusRequester.requestFocus()
+        onSelectionChange(newSelection)
+    }
     val dropTarget = remember(side) {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean {
@@ -1026,6 +1034,8 @@ private fun FileBrowserPane(
                     false
                 }
             }
+            .focusRequester(focusRequester)
+            .focusable()
             .dragAndDropTarget(
                 shouldStartDragAndDrop = { event ->
                     activeDragPayload?.canDropOn(side) == true ||
@@ -1125,7 +1135,7 @@ private fun FileBrowserPane(
                         entries = entries,
                         onParentClick = onParentClick,
                         selection = selection,
-                        onSelectionChange = onSelectionChange,
+                        onSelectionChange = onFocusedSelectionChange,
                         side = side,
                         onDragStarted = onDragStarted,
                         onOpen = onOpen,

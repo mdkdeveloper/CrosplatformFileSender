@@ -15,8 +15,9 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Pair devices by using the same discovery keyword.
 - Browse local files and the remote device's shared folders.
 - On Android, browse internal shared storage plus mounted SD cards and USB storage from the local file pane when all-files access is granted.
-- Send selected files to another device.
-- Download selected files from another device.
+- Send selected files and folders to another device.
+- Download selected files and folders from another device.
+- On Android, select files and folders with checkboxes inside opened folders; root folders are opened by tapping and are not selectable.
 - Drag files and folders between the local and remote file panes to upload or download them.
 - On desktop, drop files and folders from the system file manager into the remote file pane to send them.
 - Track active, paused, completed, failed, and cancelled transfers in a queue.
@@ -116,7 +117,7 @@ On macOS, check Java with `java -version` and list installed JDKs with `/usr/lib
 3. Start discovery from the Files screen, or enable automatic startup discovery in Settings.
 4. Add one or more whitelist folders on the device that should expose files.
 5. Select a discovered device.
-6. Browse local files and remote files.
+6. Browse local files and remote files. On Android, tap folders to open them and use checkboxes inside opened folders to select files or folders.
 7. Open a destination folder in the receiving file pane. The root view is not a transfer destination.
 8. Use Send selected or Download selected, or drag files and folders between the local and remote panes.
 9. In the desktop app, you can also drop files and folders from the system file manager into the remote pane to send them.

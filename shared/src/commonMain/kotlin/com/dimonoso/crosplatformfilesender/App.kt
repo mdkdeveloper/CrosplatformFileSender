@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -86,6 +87,7 @@ import com.dimonoso.crosplatformfilesender.filesystem.RemoteDeletePolicy
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistDeletePolicyOverride
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import com.dimonoso.crosplatformfilesender.localization.AppLocaleEnvironment
+import com.dimonoso.crosplatformfilesender.platform.PlatformFamily
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogError
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogErrorCode
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogResult
@@ -537,6 +539,7 @@ private data class FileSelectionModifiers(
 private const val SelectedDeviceMissingAttemptLimit = 5
 private const val SelectedDeviceMissingAttemptIntervalMillis = 2_000L
 private const val PaneAutoRefreshDebounceMillis = 250L
+private val FileSelectionCheckboxColumnWidth = 48.dp
 
 @Composable
 private fun FileBrowserColumns(
@@ -569,6 +572,7 @@ private fun FileBrowserColumns(
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
     val deleteProblemText = stringResource(Res.string.delete_problem)
     val shouldPromptStorageAccess = storageAccessState.requiresRuntimeApproval && !storageAccessState.isGranted
+    val useAndroidFileSelection = services.platform.deviceInfo.family == PlatformFamily.Android
 
     val localEntries = remember(localPath, localReloadToken, localRoots) {
         localPath?.let(services.fileSystem::browseLocal) ?: localRoots
@@ -734,6 +738,7 @@ private fun FileBrowserColumns(
                 localPath = entry.path
                 localSelection = FileBrowserSelection()
             },
+            useAndroidFileSelection = useAndroidFileSelection,
             noticeContent = if (shouldPromptStorageAccess) {
                 {
                     StorageAccessNotice(
@@ -817,6 +822,7 @@ private fun FileBrowserColumns(
                 remotePath = entry.path
                 remoteSelection = FileBrowserSelection()
             },
+            useAndroidFileSelection = useAndroidFileSelection,
             topRowContent = {
                 if (selectedRemoteEntries.isNotEmpty()) {
                     Button(
@@ -971,8 +977,9 @@ private fun FileBrowserPane(
     onDelete: () -> Unit,
     deleteKeyEnabled: Boolean,
     onOpen: (FileEntry) -> Unit,
+    useAndroidFileSelection: Boolean,
     noticeContent: (@Composable () -> Unit)? = null,
-    topRowContent: @Composable RowScope.() -> Unit = {},
+    topRowContent: @Composable () -> Unit = {},
 ) {
     var isDropTargetHovered by remember(side) { mutableStateOf(false) }
     val latestDragPayload = rememberUpdatedState(activeDragPayload)
@@ -1047,12 +1054,8 @@ private fun FileBrowserPane(
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            if (useAndroidFileSelection) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
                         text = path.orEmpty(),
@@ -1062,14 +1065,46 @@ private fun FileBrowserPane(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                onRootClick?.let { click ->
-                    OutlinedButton(onClick = click) {
-                        Text(rootLabel)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    onRootClick?.let { click ->
+                        OutlinedButton(onClick = click) {
+                            Text(rootLabel)
+                        }
+                    }
+                    topRowContent()
+                    OutlinedButton(onClick = onRefresh) {
+                        Text(stringResource(Res.string.refresh))
                     }
                 }
-                topRowContent()
-                OutlinedButton(onClick = onRefresh) {
-                    Text(stringResource(Res.string.refresh))
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = path.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    onRootClick?.let { click ->
+                        OutlinedButton(onClick = click) {
+                            Text(rootLabel)
+                        }
+                    }
+                    topRowContent()
+                    OutlinedButton(onClick = onRefresh) {
+                        Text(stringResource(Res.string.refresh))
+                    }
                 }
             }
             noticeContent?.invoke()
@@ -1077,7 +1112,15 @@ private fun FileBrowserPane(
                 errorText != null -> ErrorState(errorText)
                 isLoading -> EmptyState(stringResource(Res.string.loading))
                 entries.isEmpty() && onParentClick == null -> EmptyState(emptyText)
-                else -> key(fileEntryTableRenderKey(side, path, entries, onParentClick != null)) {
+                else -> key(
+                    fileEntryTableRenderKey(
+                        side = side,
+                        path = path,
+                        entries = entries,
+                        hasParentRow = onParentClick != null,
+                        useAndroidFileSelection = useAndroidFileSelection,
+                    ),
+                ) {
                     FileEntryTable(
                         entries = entries,
                         onParentClick = onParentClick,
@@ -1086,6 +1129,8 @@ private fun FileBrowserPane(
                         side = side,
                         onDragStarted = onDragStarted,
                         onOpen = onOpen,
+                        useAndroidFileSelection = useAndroidFileSelection,
+                        showSelectionCheckboxes = useAndroidFileSelection && path != null,
                     )
                 }
             }
@@ -1102,6 +1147,8 @@ private fun FileEntryTable(
     side: FilePaneSide,
     onDragStarted: (FilePaneDragPayload) -> Unit,
     onOpen: (FileEntry) -> Unit,
+    useAndroidFileSelection: Boolean,
+    showSelectionCheckboxes: Boolean,
 ) {
     val rowIds = remember(entries, onParentClick != null) {
         buildList {
@@ -1110,7 +1157,7 @@ private fun FileEntryTable(
         }
     }
     Column(modifier = Modifier.fillMaxWidth()) {
-        FileEntryTableHeader()
+        FileEntryTableHeader(showSelectionColumn = showSelectionCheckboxes)
         HorizontalDivider()
         onParentClick?.let { click ->
             FileEntryParentRow(
@@ -1125,6 +1172,8 @@ private fun FileEntryTable(
                     )
                 },
                 onOpen = click,
+                useAndroidFileSelection = useAndroidFileSelection,
+                showSelectionColumn = showSelectionCheckboxes,
             )
             HorizontalDivider()
         }
@@ -1152,6 +1201,8 @@ private fun FileEntryTable(
                         )
                     },
                     onOpen = onOpen,
+                    useAndroidFileSelection = useAndroidFileSelection,
+                    showSelectionCheckbox = showSelectionCheckboxes,
                 )
                 HorizontalDivider()
             }
@@ -1164,6 +1215,7 @@ private fun fileEntryTableRenderKey(
     path: String?,
     entries: List<FileEntry>,
     hasParentRow: Boolean,
+    useAndroidFileSelection: Boolean,
 ): String =
     buildString {
         append(side.name)
@@ -1171,6 +1223,8 @@ private fun fileEntryTableRenderKey(
         append(path.orEmpty())
         append('|')
         append(hasParentRow)
+        append('|')
+        append(useAndroidFileSelection)
         entries.forEach { entry ->
             append('|')
             append(fileEntryRowRenderKey(entry))
@@ -1195,6 +1249,8 @@ private fun FileEntryParentRow(
     isSelected: Boolean,
     onSelect: (FileSelectionModifiers) -> Unit,
     onOpen: () -> Unit,
+    useAndroidFileSelection: Boolean,
+    showSelectionColumn: Boolean,
 ) {
     var clickModifiers by remember { mutableStateOf(FileSelectionModifiers()) }
     val rowColor = if (isSelected) {
@@ -1202,9 +1258,12 @@ private fun FileEntryParentRow(
     } else {
         Color.Transparent
     }
-
-    Row(
-        modifier = Modifier
+    val rowModifier = if (useAndroidFileSelection) {
+        Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onOpen)
+    } else {
+        Modifier
             .fillMaxWidth()
             .captureFileSelectionModifiers { clickModifiers = it }
             .combinedClickable(
@@ -1213,11 +1272,18 @@ private fun FileEntryParentRow(
                     onOpen()
                 },
             )
+    }
+
+    Row(
+        modifier = rowModifier
             .background(rowColor, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (showSelectionColumn) {
+            Spacer(modifier = Modifier.width(FileSelectionCheckboxColumnWidth))
+        }
         Text(
             text = "..",
             modifier = Modifier.weight(1f),
@@ -1235,7 +1301,7 @@ private fun FileEntryParentRow(
 }
 
 @Composable
-private fun FileEntryTableHeader() {
+private fun FileEntryTableHeader(showSelectionColumn: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1243,6 +1309,9 @@ private fun FileEntryTableHeader() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (showSelectionColumn) {
+            Spacer(modifier = Modifier.width(FileSelectionCheckboxColumnWidth))
+        }
         Text(
             text = stringResource(Res.string.name_column),
             modifier = Modifier.weight(1f),
@@ -1273,6 +1342,8 @@ private fun FileEntryTableRow(
     onDragStarted: (FilePaneDragPayload) -> Unit,
     onSelect: (FileSelectionModifiers) -> Unit,
     onOpen: (FileEntry) -> Unit,
+    useAndroidFileSelection: Boolean,
+    showSelectionCheckbox: Boolean,
 ) {
     var clickModifiers by remember(entry.path) { mutableStateOf(FileSelectionModifiers()) }
     val rowColor = if (isSelected) {
@@ -1280,9 +1351,23 @@ private fun FileEntryTableRow(
     } else {
         Color.Transparent
     }
-
-    Row(
-        modifier = Modifier
+    val rowModifier = if (useAndroidFileSelection) {
+        Modifier
+            .fillMaxWidth()
+            .filePaneDragSource(
+                side = side,
+                dragEntries = dragEntries,
+                onDragStarted = onDragStarted,
+            )
+            .combinedClickable(
+                onClick = {
+                    if (entry.isBrowseable) {
+                        onOpen(entry)
+                    }
+                },
+            )
+    } else {
+        Modifier
             .fillMaxWidth()
             .captureFileSelectionModifiers { clickModifiers = it }
             .filePaneDragSource(
@@ -1298,11 +1383,28 @@ private fun FileEntryTableRow(
                     }
                 },
             )
+    }
+
+    Row(
+        modifier = rowModifier
             .background(rowColor, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (showSelectionCheckbox) {
+            Box(
+                modifier = Modifier.width(FileSelectionCheckboxColumnWidth),
+                contentAlignment = Alignment.Center,
+            ) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = {
+                        onSelect(FileSelectionModifiers(isToggleSelection = true))
+                    },
+                )
+            }
+        }
         Text(
             text = entry.name,
             modifier = Modifier.weight(1f),

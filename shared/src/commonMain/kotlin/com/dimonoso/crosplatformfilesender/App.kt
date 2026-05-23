@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -1695,29 +1697,17 @@ private fun BackupSettings(
     onModeChange: (BackupMode) -> Unit,
 ) {
     SectionColumn(title = stringResource(Res.string.backup_mode)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BackupModeButton(BackupMode.BackupFolder, stringResource(Res.string.backup_folder), mode, onModeChange)
-            BackupModeButton(BackupMode.BackupOnlyFile, stringResource(Res.string.backup_file), mode, onModeChange)
-            BackupModeButton(BackupMode.DoNotBackup, stringResource(Res.string.backup_none), mode, onModeChange)
-        }
-    }
-}
-
-@Composable
-private fun BackupModeButton(
-    mode: BackupMode,
-    label: String,
-    selectedMode: BackupMode,
-    onModeChange: (BackupMode) -> Unit,
-) {
-    if (mode == selectedMode) {
-        Button(onClick = { onModeChange(mode) }) {
-            Text(label)
-        }
-    } else {
-        OutlinedButton(onClick = { onModeChange(mode) }) {
-            Text(label)
-        }
+        SingleChoiceDropdown(
+            selected = mode,
+            options = listOf(
+                BackupMode.BackupFolder,
+                BackupMode.BackupOnlyFile,
+                BackupMode.DoNotBackup,
+            ),
+            label = { backupModeLabel(it) },
+            onSelected = onModeChange,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -1728,52 +1718,13 @@ private fun RemoteDeleteSettings(
     onPolicyChange: (RemoteDeletePolicy) -> Unit,
 ) {
     SectionColumn(title = stringResource(Res.string.remote_delete_policy)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RemoteDeletePolicyButton(
-                policy = RemoteDeletePolicy.DoNothing,
-                label = stringResource(Res.string.delete_policy_none),
-                selectedPolicy = policy,
-                onPolicyChange = onPolicyChange,
-            )
-            RemoteDeletePolicyButton(
-                policy = RemoteDeletePolicy.Ask,
-                label = stringResource(Res.string.delete_policy_ask),
-                selectedPolicy = policy,
-                onPolicyChange = onPolicyChange,
-            )
-            if (supportsTrash) {
-                RemoteDeletePolicyButton(
-                    policy = RemoteDeletePolicy.Trash,
-                    label = stringResource(Res.string.delete_policy_trash),
-                    selectedPolicy = policy,
-                    onPolicyChange = onPolicyChange,
-                )
-            }
-            RemoteDeletePolicyButton(
-                policy = RemoteDeletePolicy.Permanent,
-                label = stringResource(Res.string.delete_policy_permanent),
-                selectedPolicy = policy,
-                onPolicyChange = onPolicyChange,
-            )
-        }
-    }
-}
-
-@Composable
-private fun RemoteDeletePolicyButton(
-    policy: RemoteDeletePolicy,
-    label: String,
-    selectedPolicy: RemoteDeletePolicy,
-    onPolicyChange: (RemoteDeletePolicy) -> Unit,
-) {
-    if (policy == selectedPolicy) {
-        Button(onClick = { onPolicyChange(policy) }) {
-            Text(label)
-        }
-    } else {
-        OutlinedButton(onClick = { onPolicyChange(policy) }) {
-            Text(label)
-        }
+        SingleChoiceDropdown(
+            selected = policy,
+            options = remoteDeletePolicyOptions(supportsTrash, policy),
+            label = { remoteDeletePolicyLabel(it) },
+            onSelected = onPolicyChange,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -2026,35 +1977,92 @@ internal expect fun WhitelistRow(
 )
 
 @Composable
-internal fun WhitelistDeletePolicyButton(
-    policy: WhitelistDeletePolicyOverride,
-    label: String,
-    selectedPolicy: WhitelistDeletePolicyOverride,
-    onPolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
-    singleLineLabel: Boolean = false,
+internal fun <T> SingleChoiceDropdown(
+    selected: T,
+    options: List<T>,
+    label: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    if (policy == selectedPolicy) {
-        Button(onClick = { onPolicyChange(policy) }) {
-            WhitelistDeletePolicyButtonLabel(label, singleLineLabel)
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { expanded = true },
+        ) {
+            Text(label(selected), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-    } else {
-        OutlinedButton(onClick = { onPolicyChange(policy) }) {
-            WhitelistDeletePolicyButtonLabel(label, singleLineLabel)
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(label(option), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = {
+                        expanded = false
+                        onSelected(option)
+                    },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun WhitelistDeletePolicyButtonLabel(
-    label: String,
-    singleLineLabel: Boolean,
-) {
-    if (singleLineLabel) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    } else {
-        Text(label)
+private fun backupModeLabel(mode: BackupMode): String =
+    when (mode) {
+        BackupMode.BackupFolder -> stringResource(Res.string.backup_folder)
+        BackupMode.BackupOnlyFile -> stringResource(Res.string.backup_file)
+        BackupMode.DoNotBackup -> stringResource(Res.string.backup_none)
     }
-}
+
+internal fun remoteDeletePolicyOptions(
+    supportsTrash: Boolean,
+    selectedPolicy: RemoteDeletePolicy,
+): List<RemoteDeletePolicy> =
+    buildList {
+        add(RemoteDeletePolicy.DoNothing)
+        add(RemoteDeletePolicy.Ask)
+        if (supportsTrash || selectedPolicy == RemoteDeletePolicy.Trash) {
+            add(RemoteDeletePolicy.Trash)
+        }
+        add(RemoteDeletePolicy.Permanent)
+    }
+
+@Composable
+private fun remoteDeletePolicyLabel(policy: RemoteDeletePolicy): String =
+    when (policy) {
+        RemoteDeletePolicy.DoNothing -> stringResource(Res.string.delete_policy_none)
+        RemoteDeletePolicy.Ask -> stringResource(Res.string.delete_policy_ask)
+        RemoteDeletePolicy.Trash -> stringResource(Res.string.delete_policy_trash)
+        RemoteDeletePolicy.Permanent -> stringResource(Res.string.delete_policy_permanent)
+    }
+
+internal fun whitelistDeletePolicyOptions(
+    canMoveFolderToTrash: Boolean,
+    selectedPolicy: WhitelistDeletePolicyOverride,
+): List<WhitelistDeletePolicyOverride> =
+    buildList {
+        add(WhitelistDeletePolicyOverride.UseDefault)
+        add(WhitelistDeletePolicyOverride.DoNothing)
+        add(WhitelistDeletePolicyOverride.Ask)
+        if (canMoveFolderToTrash || selectedPolicy == WhitelistDeletePolicyOverride.Trash) {
+            add(WhitelistDeletePolicyOverride.Trash)
+        }
+        add(WhitelistDeletePolicyOverride.Permanent)
+    }
+
+@Composable
+internal fun whitelistDeletePolicyLabel(policy: WhitelistDeletePolicyOverride): String =
+    when (policy) {
+        WhitelistDeletePolicyOverride.UseDefault -> stringResource(Res.string.delete_policy_default)
+        WhitelistDeletePolicyOverride.DoNothing -> stringResource(Res.string.delete_policy_none)
+        WhitelistDeletePolicyOverride.Ask -> stringResource(Res.string.delete_policy_ask)
+        WhitelistDeletePolicyOverride.Trash -> stringResource(Res.string.delete_policy_trash)
+        WhitelistDeletePolicyOverride.Permanent -> stringResource(Res.string.delete_policy_permanent)
+    }
 
 @Composable
 private fun PendingRemoteDeleteDialog(services: AppServices) {

@@ -88,6 +88,7 @@ The repository also includes helper scripts that build platform artifacts and op
 ```bash
 ./build-android.sh
 ./build-linux.sh
+./build-macos.sh
 ```
 
 ```powershell
@@ -101,6 +102,9 @@ Useful output locations:
 - Android APK: `androidApp/build/outputs/apk/debug/`
 - Windows MSI: `desktopApp/build/compose/binaries/main/msi/`
 - Linux DEB: `desktopApp/build/compose/binaries/main/deb/`
+- macOS DMG: `desktopApp/build/compose/binaries/main/dmg/`
+
+macOS DMG builds must be run on macOS with a full JDK that includes `jpackage` and `jlink`.
 
 ## Basic usage
 

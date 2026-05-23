@@ -7,6 +7,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.InetAddress
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 actual fun createPlatformServices(): PlatformServices {
     val userName = System.getProperty("user.name", "user")
@@ -24,6 +26,7 @@ actual fun createPlatformServices(): PlatformServices {
         ),
         fileSystem = JvmPlatformFileSystem(),
         networkPermissions = JvmNetworkPermissionGateway(),
+        storageAccess = JvmStorageAccessGateway(),
     )
 }
 
@@ -163,4 +166,20 @@ private class JvmNetworkPermissionGateway : NetworkPermissionGateway {
             requiresRuntimeApproval = false,
             statusLabel = "Desktop LAN access available",
         )
+}
+
+private class JvmStorageAccessGateway : StorageAccessGateway {
+    private val grantedState = MutableStateFlow(
+        StorageAccessState(
+            requiresRuntimeApproval = false,
+            isGranted = true,
+            statusLabel = "Desktop filesystem access available",
+        ),
+    )
+
+    override val state: StateFlow<StorageAccessState> = grantedState
+
+    override fun refresh() = Unit
+
+    override fun requestAccess() = Unit
 }

@@ -17,6 +17,8 @@
     <string name="my_files">My files</string>
     <string name="to_roots">To roots</string>
     <string name="empty_or_limited_access">Empty or access is limited</string>
+    <string name="android_storage_access_message">Grant Android all-files access for full local storage browsing.</string>
+    <string name="android_storage_access_button">Grant file access</string>
     <string name="open">Open</string>
     <string name="remote_files">Remote files</string>
     <string name="refresh">Refresh</string>

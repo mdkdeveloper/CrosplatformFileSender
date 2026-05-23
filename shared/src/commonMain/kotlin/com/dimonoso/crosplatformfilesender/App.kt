@@ -50,6 +50,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -106,6 +107,8 @@ import com.dimonoso.crosplatformfilesender.transfer.toTransferEndpoint
 import crosplatformfilesender.shared.generated.resources.Res
 import crosplatformfilesender.shared.generated.resources.add_folder
 import crosplatformfilesender.shared.generated.resources.add_upload
+import crosplatformfilesender.shared.generated.resources.android_storage_access_button
+import crosplatformfilesender.shared.generated.resources.android_storage_access_message
 import crosplatformfilesender.shared.generated.resources.archive_download_message
 import crosplatformfilesender.shared.generated.resources.archive_download_title
 import crosplatformfilesender.shared.generated.resources.archive_no
@@ -541,12 +544,12 @@ private fun FileBrowserColumns(
     selectedDevice: DiscoveredDevice?,
     keyword: String,
 ) {
-    val localRoots = remember(services) { services.fileSystem.localRoots() }
+    var localReloadToken by remember { mutableStateOf(0) }
+    val localRoots = remember(services, localReloadToken) { services.fileSystem.localRoots() }
     var localPath by remember { mutableStateOf<String?>(null) }
     var localPathStack by remember { mutableStateOf<List<String?>>(emptyList()) }
     var localSelection by remember { mutableStateOf(FileBrowserSelection()) }
     var activeFilePane by remember { mutableStateOf<FilePaneSide?>(null) }
-    var localReloadToken by remember { mutableStateOf(0) }
     var remotePath by remember(selectedDevice?.id) { mutableStateOf<String?>(null) }
     var remotePathStack by remember(selectedDevice?.id) { mutableStateOf<List<String?>>(emptyList()) }
     var remoteSelection by remember(selectedDevice?.id) { mutableStateOf(FileBrowserSelection()) }
@@ -560,10 +563,12 @@ private fun FileBrowserColumns(
     var localAutoRefreshRequest by remember { mutableStateOf(0) }
     var remoteAutoRefreshRequest by remember(selectedDevice?.id) { mutableStateOf(0) }
     val transferTasks by services.transferQueue.tasks.collectAsState()
+    val storageAccessState by services.platform.storageAccess.state.collectAsState()
     val autoRefreshTracker = remember(services.transferQueue) { TransferPaneAutoRefreshTracker() }
     val coroutineScope = rememberCoroutineScope()
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
     val deleteProblemText = stringResource(Res.string.delete_problem)
+    val shouldPromptStorageAccess = storageAccessState.requiresRuntimeApproval && !storageAccessState.isGranted
 
     val localEntries = remember(localPath, localReloadToken, localRoots) {
         localPath?.let(services.fileSystem::browseLocal) ?: localRoots
@@ -728,6 +733,17 @@ private fun FileBrowserColumns(
                 localPathStack = localPathStack + localPath
                 localPath = entry.path
                 localSelection = FileBrowserSelection()
+            },
+            noticeContent = if (shouldPromptStorageAccess) {
+                {
+                    StorageAccessNotice(
+                        message = stringResource(Res.string.android_storage_access_message),
+                        buttonText = stringResource(Res.string.android_storage_access_button),
+                        onClick = services.platform.storageAccess::requestAccess,
+                    )
+                }
+            } else {
+                null
             },
             topRowContent = {
                 if (selectedLocalEntries.isNotEmpty() && selectedDevice != null) {
@@ -955,6 +971,7 @@ private fun FileBrowserPane(
     onDelete: () -> Unit,
     deleteKeyEnabled: Boolean,
     onOpen: (FileEntry) -> Unit,
+    noticeContent: (@Composable () -> Unit)? = null,
     topRowContent: @Composable RowScope.() -> Unit = {},
 ) {
     var isDropTargetHovered by remember(side) { mutableStateOf(false) }
@@ -1055,19 +1072,22 @@ private fun FileBrowserPane(
                     Text(stringResource(Res.string.refresh))
                 }
             }
+            noticeContent?.invoke()
             when {
                 errorText != null -> ErrorState(errorText)
                 isLoading -> EmptyState(stringResource(Res.string.loading))
                 entries.isEmpty() && onParentClick == null -> EmptyState(emptyText)
-                else -> FileEntryTable(
-                    entries = entries,
-                    onParentClick = onParentClick,
-                    selection = selection,
-                    onSelectionChange = onSelectionChange,
-                    side = side,
-                    onDragStarted = onDragStarted,
-                    onOpen = onOpen,
-                )
+                else -> key(fileEntryTableRenderKey(side, path, entries, onParentClick != null)) {
+                    FileEntryTable(
+                        entries = entries,
+                        onParentClick = onParentClick,
+                        selection = selection,
+                        onSelectionChange = onSelectionChange,
+                        side = side,
+                        onDragStarted = onDragStarted,
+                        onOpen = onOpen,
+                    )
+                }
             }
         }
     }
@@ -1109,33 +1129,66 @@ private fun FileEntryTable(
             HorizontalDivider()
         }
         entries.forEach { entry ->
-            FileEntryTableRow(
-                entry = entry,
-                isSelected = entry.path in selection.selectedRowIds,
-                side = side,
-                dragEntries = {
-                    filePaneDragEntries(
-                        entries = entries,
-                        selectedRowIds = selection.selectedRowIds,
-                        draggedRowId = entry.path,
-                    )
-                },
-                onDragStarted = onDragStarted,
-                onSelect = { modifiers ->
-                    onSelectionChange(
-                        selection.updatedSelection(
-                            rowIds = rowIds,
-                            rowId = entry.path,
-                            modifiers = modifiers,
-                        ),
-                    )
-                },
-                onOpen = onOpen,
-            )
-            HorizontalDivider()
+            key(fileEntryRowRenderKey(entry)) {
+                FileEntryTableRow(
+                    entry = entry,
+                    isSelected = entry.path in selection.selectedRowIds,
+                    side = side,
+                    dragEntries = {
+                        filePaneDragEntries(
+                            entries = entries,
+                            selectedRowIds = selection.selectedRowIds,
+                            draggedRowId = entry.path,
+                        )
+                    },
+                    onDragStarted = onDragStarted,
+                    onSelect = { modifiers ->
+                        onSelectionChange(
+                            selection.updatedSelection(
+                                rowIds = rowIds,
+                                rowId = entry.path,
+                                modifiers = modifiers,
+                            ),
+                        )
+                    },
+                    onOpen = onOpen,
+                )
+                HorizontalDivider()
+            }
         }
     }
 }
+
+private fun fileEntryTableRenderKey(
+    side: FilePaneSide,
+    path: String?,
+    entries: List<FileEntry>,
+    hasParentRow: Boolean,
+): String =
+    buildString {
+        append(side.name)
+        append('|')
+        append(path.orEmpty())
+        append('|')
+        append(hasParentRow)
+        entries.forEach { entry ->
+            append('|')
+            append(fileEntryRowRenderKey(entry))
+        }
+    }
+
+private fun fileEntryRowRenderKey(entry: FileEntry): String =
+    buildString {
+        append(entry.path)
+        append('|')
+        append(entry.name)
+        append('|')
+        append(entry.type.name)
+        append('|')
+        append(entry.sizeBytes ?: "")
+        append('|')
+        append(entry.isBrowseable)
+    }
 
 @Composable
 private fun FileEntryParentRow(
@@ -2226,6 +2279,27 @@ private fun StatusPill(text: String) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun StorageAccessNotice(
+    message: String,
+    buttonText: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(onClick = onClick) {
+            Text(buttonText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 

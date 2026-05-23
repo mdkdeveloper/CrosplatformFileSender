@@ -14,6 +14,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Optionally start device discovery automatically when the app opens.
 - Pair devices by using the same discovery keyword.
 - Browse local files and the remote device's shared folders.
+- On Android, browse internal shared storage plus mounted SD cards and USB storage from the local file pane when all-files access is granted.
 - Send selected files to another device.
 - Download selected files from another device.
 - Drag files and folders between the local and remote file panes to upload or download them.
@@ -34,6 +35,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Android builds require Android Studio or an installed Android SDK.
 - Desktop builds require a JDK. Native desktop packages require a full JDK with `jpackage` and `jlink`.
 - Android devices may need Wi-Fi/multicast permissions for LAN discovery to work reliably.
+- Android full local file browsing requires enabling the app's all-files access permission in system settings. The system folder picker remains available for whitelist folders.
 
 ## Run and build
 
@@ -148,6 +150,12 @@ Remote deletion requests are disabled by default. Settings can allow the owner d
 - Add a whitelist folder on the remote device.
 - Make sure the whitelist folder is enabled.
 - On Android, choose a folder that the app can access through the system picker.
+
+### Android local files are empty
+
+- Grant all-files access when the local file pane prompts for it.
+- Tap Refresh after attaching an SD card or USB drive.
+- The Android local roots are internal storage at `/storage/emulated/0` plus mounted removable storage detected by the system.
 
 ### Transfers fail
 

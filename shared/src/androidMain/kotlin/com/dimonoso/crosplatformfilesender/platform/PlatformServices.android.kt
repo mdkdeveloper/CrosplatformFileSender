@@ -1,9 +1,14 @@
 package com.dimonoso.crosplatformfilesender.platform
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
+import android.provider.Settings
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import java.io.File
@@ -11,9 +16,20 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 fun bindAndroidPlatformContext(context: Context) {
     AndroidPlatformContext.context = context.applicationContext
+}
+
+fun bindAndroidStorageAccessActivity(activity: Activity) {
+    AndroidStorageAccessBridge.activity = activity
+    AndroidStorageAccessBridge.refresh()
+}
+
+fun refreshAndroidStorageAccessState() {
+    AndroidStorageAccessBridge.refresh()
 }
 
 actual fun createPlatformServices(): PlatformServices =
@@ -26,6 +42,7 @@ actual fun createPlatformServices(): PlatformServices =
         ),
         fileSystem = AndroidPlatformFileSystem(AndroidPlatformContext.context),
         networkPermissions = AndroidNetworkPermissionGateway(),
+        storageAccess = AndroidStorageAccessGateway(AndroidPlatformContext.context),
     )
 
 private object AndroidPlatformContext {
@@ -41,19 +58,7 @@ private class AndroidPlatformFileSystem(
         get() = hasTrashDocumentMethod()
 
     override fun roots(): List<FileEntry> =
-        listOf(
-            FileEntry(
-                path = "content://system-file-picker",
-                name = "System file picker",
-                type = FileEntryType.Directory,
-                isBrowseable = false,
-            ),
-            FileEntry(
-                path = "app://sandbox",
-                name = "App sandbox",
-                type = FileEntryType.Directory,
-            ),
-        )
+        androidStorageRootEntries(androidStorageRootCandidates(context))
 
     override fun list(path: String): List<FileEntry> {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.list(path)
@@ -222,8 +227,10 @@ private class AndroidPlatformFileSystem(
         return runCatching { DocumentsContract.deleteDocument(resolver, uri) }.getOrDefault(false)
     }
 
-    override fun cacheDirectoryPath(): String =
-        File(context?.cacheDir ?: File(System.getProperty("java.io.tmpdir")), "CrosplatformFileSender").absolutePath
+    override fun cacheDirectoryPath(): String {
+        val fallbackCacheRoot = File(System.getProperty("java.io.tmpdir") ?: ".")
+        return File(context?.cacheDir ?: fallbackCacheRoot, "CrosplatformFileSender").absolutePath
+    }
 
     private fun resolveDocumentUri(path: String): Uri? {
         val uri = Uri.parse(path.syntheticChild()?.parentPath ?: path)
@@ -309,13 +316,17 @@ private fun String.isContentPath(): Boolean = startsWith("content://")
 
 private object JvmLikeAndroidFiles {
     fun list(path: String): List<FileEntry> =
-        File(path).listFiles()
-            ?.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
-            ?.map { file -> file.toFileEntry() }
-            .orEmpty()
+        runCatching {
+            File(path).listFiles()
+                ?.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
+                ?.map { file -> file.toFileEntry() }
+                .orEmpty()
+        }.getOrDefault(emptyList())
 
     fun metadata(path: String): FileEntry? =
-        File(path).takeIf { it.exists() }?.toFileEntry()
+        runCatching {
+            File(path).takeIf { it.exists() }?.toFileEntry()
+        }.getOrNull()
 
     fun createDirectories(path: String): Boolean =
         File(path).let { it.exists() && it.isDirectory || it.mkdirs() }
@@ -389,6 +400,67 @@ private class AndroidWriteStream(
     }
 }
 
+private fun androidStorageRootCandidates(context: Context?): List<AndroidStorageRootCandidate> =
+    buildList {
+        val primaryRoot = externalStorageDirectory()
+        val primaryState = runCatching { Environment.getExternalStorageState(primaryRoot) }
+            .getOrDefault(Environment.getExternalStorageState())
+        add(
+            AndroidStorageRootCandidate(
+                path = primaryRoot.absolutePath,
+                displayName = "Internal storage",
+                isPrimary = true,
+                isMounted = primaryState.isMountedStorageState(),
+                exists = primaryRoot.exists(),
+            ),
+        )
+
+        if (context == null) return@buildList
+
+        addAll(storageVolumeRootCandidates(context))
+        addAll(externalFilesRootCandidates(context))
+    }
+
+private fun storageVolumeRootCandidates(context: Context): List<AndroidStorageRootCandidate> {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
+    val storageManager = context.getSystemService(StorageManager::class.java) ?: return emptyList()
+
+    return storageManager.storageVolumes.mapNotNull { volume ->
+        val directory = volume.directory ?: return@mapNotNull null
+        AndroidStorageRootCandidate(
+            path = directory.absolutePath,
+            displayName = volume.getDescription(context),
+            isPrimary = volume.isPrimary,
+            isMounted = volume.state.isMountedStorageState(),
+            exists = directory.exists(),
+        )
+    }
+}
+
+private fun externalFilesRootCandidates(context: Context): List<AndroidStorageRootCandidate> =
+    context.getExternalFilesDirs(null)
+        .filterNotNull()
+        .mapNotNull { directory ->
+            val rootPath = androidSharedStorageRootPath(directory.absolutePath, context.packageName)
+                ?: return@mapNotNull null
+            AndroidStorageRootCandidate(
+                path = rootPath,
+                displayName = null,
+                isPrimary = false,
+                isMounted = runCatching { Environment.getExternalStorageState(directory) }
+                    .getOrDefault(Environment.MEDIA_UNKNOWN)
+                    .isMountedStorageState(),
+                exists = File(rootPath).exists(),
+            )
+        }
+
+@Suppress("DEPRECATION")
+private fun externalStorageDirectory(): File =
+    Environment.getExternalStorageDirectory()
+
+private fun String.isMountedStorageState(): Boolean =
+    this == Environment.MEDIA_MOUNTED || this == Environment.MEDIA_MOUNTED_READ_ONLY
+
 private class AndroidNetworkPermissionGateway : NetworkPermissionGateway {
     override fun currentState(): NetworkPermissionState =
         NetworkPermissionState(
@@ -396,4 +468,70 @@ private class AndroidNetworkPermissionGateway : NetworkPermissionGateway {
             requiresRuntimeApproval = false,
             statusLabel = "Android LAN access scaffolded",
         )
+}
+
+private class AndroidStorageAccessGateway(
+    private val context: Context?,
+) : StorageAccessGateway {
+    private val mutableState = MutableStateFlow(currentState())
+
+    init {
+        AndroidStorageAccessBridge.gateway = this
+    }
+
+    override val state: StateFlow<StorageAccessState> = mutableState
+
+    override fun refresh() {
+        mutableState.value = currentState()
+    }
+
+    override fun requestAccess() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        AndroidStorageAccessBridge.requestAccess(context)
+    }
+
+    private fun currentState(): StorageAccessState =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val granted = Environment.isExternalStorageManager()
+            StorageAccessState(
+                requiresRuntimeApproval = true,
+                isGranted = granted,
+                statusLabel = if (granted) {
+                    "Android all files access granted"
+                } else {
+                    "Android all files access required"
+                },
+            )
+        } else {
+            StorageAccessState(
+                requiresRuntimeApproval = false,
+                isGranted = true,
+                statusLabel = "Android legacy storage access available",
+            )
+        }
+}
+
+private object AndroidStorageAccessBridge {
+    var activity: Activity? = null
+    var gateway: AndroidStorageAccessGateway? = null
+
+    fun refresh() {
+        gateway?.refresh()
+    }
+
+    fun requestAccess(context: Context?) {
+        val currentActivity = activity ?: return
+        val packageName = context?.packageName ?: currentActivity.packageName
+        val packageUri = Uri.parse("package:$packageName")
+        val appSettingsIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri)
+        val allFilesIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+
+        runCatching {
+            currentActivity.startActivity(appSettingsIntent)
+        }.getOrElse {
+            runCatching {
+                currentActivity.startActivity(allFilesIntent)
+            }
+        }
+    }
 }

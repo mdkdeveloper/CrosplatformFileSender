@@ -2,6 +2,7 @@ package com.dimonoso.crosplatformfilesender.platform
 
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
+import kotlinx.coroutines.flow.StateFlow
 
 enum class PlatformFamily {
     Android,
@@ -23,6 +24,12 @@ data class PlatformDeviceInfo(
 data class NetworkPermissionState(
     val supportsUdpDiscovery: Boolean,
     val requiresRuntimeApproval: Boolean,
+    val statusLabel: String,
+)
+
+data class StorageAccessState(
+    val requiresRuntimeApproval: Boolean,
+    val isGranted: Boolean,
     val statusLabel: String,
 )
 
@@ -82,10 +89,19 @@ interface NetworkPermissionGateway {
     fun currentState(): NetworkPermissionState
 }
 
+interface StorageAccessGateway {
+    val state: StateFlow<StorageAccessState>
+
+    fun refresh()
+
+    fun requestAccess()
+}
+
 data class PlatformServices(
     val deviceInfo: PlatformDeviceInfo,
     val fileSystem: PlatformFileSystem,
     val networkPermissions: NetworkPermissionGateway,
+    val storageAccess: StorageAccessGateway,
 )
 
 expect fun createPlatformServices(): PlatformServices

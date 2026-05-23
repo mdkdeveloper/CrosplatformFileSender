@@ -10,7 +10,9 @@ import android.content.Intent
 import com.dimonoso.crosplatformfilesender.backup.bindAndroidBackupContext
 import com.dimonoso.crosplatformfilesender.platform.bindAndroidFolderPickerActivity
 import com.dimonoso.crosplatformfilesender.platform.bindAndroidPlatformContext
+import com.dimonoso.crosplatformfilesender.platform.bindAndroidStorageAccessActivity
 import com.dimonoso.crosplatformfilesender.platform.handleAndroidFolderPickerResult
+import com.dimonoso.crosplatformfilesender.platform.refreshAndroidStorageAccessState
 import com.dimonoso.crosplatformfilesender.settings.bindAndroidSettingsContext
 
 class MainActivity : ComponentActivity() {
@@ -19,6 +21,7 @@ class MainActivity : ComponentActivity() {
         bindAndroidBackupContext(applicationContext)
         bindAndroidPlatformContext(applicationContext)
         bindAndroidFolderPickerActivity(this)
+        bindAndroidStorageAccessActivity(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
@@ -32,6 +35,11 @@ class MainActivity : ComponentActivity() {
         if (handleAndroidFolderPickerResult(requestCode, resultCode, data)) return
 
         super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshAndroidStorageAccessState()
     }
 }
 

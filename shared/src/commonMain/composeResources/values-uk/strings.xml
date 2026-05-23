@@ -17,6 +17,8 @@
     <string name="my_files">Мої файли</string>
     <string name="to_roots">До коренів</string>
     <string name="empty_or_limited_access">Порожньо або доступ обмежено</string>
+    <string name="android_storage_access_message">Для повного перегляду локального сховища надайте Android доступ до всіх файлів.</string>
+    <string name="android_storage_access_button">Надати доступ</string>
     <string name="open">Відкрити</string>
     <string name="remote_files">Віддалені файли</string>
     <string name="refresh">Оновити</string>

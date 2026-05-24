@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -40,13 +41,19 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -64,9 +71,12 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -78,6 +88,8 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -318,9 +330,11 @@ private fun AppHeader(
             services = services,
             onClick = onQueueClick,
         )
-        OutlinedButton(onClick = onSettingsClick) {
-            Text(stringResource(Res.string.settings_tab), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        IconActionButton(
+            label = stringResource(Res.string.settings_tab),
+            onClick = onSettingsClick,
+            icon = { SettingsIcon() },
+        )
     }
 }
 
@@ -372,19 +386,20 @@ private fun SearchToggleButton(
     }
 
     if (isRunning) {
-        Button(
+        IconActionButton(
+            label = label,
             enabled = enabled,
             onClick = onClick,
-        ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+            variant = IconButtonVariant.Filled,
+            icon = { StopIcon() },
+        )
     } else {
-        OutlinedButton(
+        IconActionButton(
+            label = label,
             enabled = enabled,
             onClick = onClick,
-        ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+            icon = { SearchIcon() },
+        )
     }
 }
 
@@ -399,9 +414,11 @@ private fun QueueButton(
         stringResource(Res.string.queue_progress, (it * 100).roundToInt().toString())
     } ?: stringResource(Res.string.queue)
 
-    OutlinedButton(onClick = onClick) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+    IconActionButton(
+        label = label,
+        onClick = onClick,
+        icon = { QueueIcon() },
+    )
 }
 
 @Composable
@@ -758,16 +775,17 @@ private fun FileBrowserColumns(
             },
             topRowContent = {
                 if (selectedLocalEntries.isNotEmpty() && selectedDevice != null) {
-                    Button(
+                    IconActionButton(
+                        label = stringResource(Res.string.send_selected),
                         onClick = {
                             requestFilePaneTransfer(
                                 payload = FilePaneDragPayload(FilePaneSide.Local, selectedLocalEntries),
                                 target = FilePaneSide.Remote,
                             )
                         },
-                    ) {
-                        Text(stringResource(Res.string.send_selected))
-                    }
+                        variant = IconButtonVariant.Filled,
+                        icon = { UploadIcon() },
+                    )
                 }
             },
         )
@@ -831,16 +849,17 @@ private fun FileBrowserColumns(
             useAndroidFileSelection = useAndroidFileSelection,
             topRowContent = {
                 if (selectedRemoteEntries.isNotEmpty()) {
-                    Button(
+                    IconActionButton(
+                        label = stringResource(Res.string.download_selected),
                         onClick = {
                             requestFilePaneTransfer(
                                 payload = FilePaneDragPayload(FilePaneSide.Remote, selectedRemoteEntries),
                                 target = FilePaneSide.Local,
                             )
                         },
-                    ) {
-                        Text(stringResource(Res.string.download_selected))
-                    }
+                        variant = IconButtonVariant.Filled,
+                        icon = { DownloadIcon() },
+                    )
                 }
             },
         )
@@ -1084,14 +1103,18 @@ private fun FileBrowserPane(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     onRootClick?.let { click ->
-                        OutlinedButton(onClick = click) {
-                            Text(rootLabel)
-                        }
+                        IconActionButton(
+                            label = rootLabel,
+                            onClick = click,
+                            icon = { AddFolderIcon() },
+                        )
                     }
                     topRowContent()
-                    OutlinedButton(onClick = onRefresh) {
-                        Text(stringResource(Res.string.refresh))
-                    }
+                    IconActionButton(
+                        label = stringResource(Res.string.refresh),
+                        onClick = onRefresh,
+                        icon = { RefreshIcon() },
+                    )
                 }
             } else {
                 Row(
@@ -1110,14 +1133,18 @@ private fun FileBrowserPane(
                         )
                     }
                     onRootClick?.let { click ->
-                        OutlinedButton(onClick = click) {
-                            Text(rootLabel)
-                        }
+                        IconActionButton(
+                            label = rootLabel,
+                            onClick = click,
+                            icon = { AddFolderIcon() },
+                        )
                     }
                     topRowContent()
-                    OutlinedButton(onClick = onRefresh) {
-                        Text(stringResource(Res.string.refresh))
-                    }
+                    IconActionButton(
+                        label = stringResource(Res.string.refresh),
+                        onClick = onRefresh,
+                        icon = { RefreshIcon() },
+                    )
                 }
             }
             noticeContent?.invoke()
@@ -1936,7 +1963,8 @@ private fun WhitelistSettings(
     services: AppServices,
 ) {
     SectionColumn(title = stringResource(Res.string.whitelist_folders)) {
-        Button(
+        IconActionButton(
+            label = stringResource(Res.string.add_folder),
             enabled = services.folderPicker.isAvailable,
             onClick = {
                 services.folderPicker.pickFolder { folder ->
@@ -1949,9 +1977,9 @@ private fun WhitelistSettings(
                     )
                 }
             },
-        ) {
-            Text(stringResource(Res.string.add_folder))
-        }
+            variant = IconButtonVariant.Filled,
+            icon = { AddFolderIcon() },
+        )
         if (whitelist.isEmpty()) {
             EmptyState(stringResource(Res.string.whitelist_empty))
         } else {
@@ -2471,6 +2499,209 @@ private fun ErrorState(text: String) {
             modifier = Modifier.padding(16.dp),
             style = MaterialTheme.typography.bodyMedium,
         )
+    }
+}
+
+private enum class IconButtonVariant {
+    Filled,
+    Outlined,
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun IconActionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    variant: IconButtonVariant = IconButtonVariant.Outlined,
+    icon: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = {
+            PlainTooltip {
+                Text(label)
+            }
+        },
+        state = rememberTooltipState(),
+    ) {
+        val buttonModifier = modifier
+            .size(44.dp)
+            .semantics {
+                contentDescription = label
+            }
+
+        when (variant) {
+            IconButtonVariant.Filled -> Button(
+                enabled = enabled,
+                onClick = onClick,
+                modifier = buttonModifier,
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                icon()
+            }
+            IconButtonVariant.Outlined -> OutlinedButton(
+                enabled = enabled,
+                onClick = onClick,
+                modifier = buttonModifier,
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                icon()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val center = Offset(size.width * 0.5f, size.height * 0.5f)
+        val outer = size.minDimension * 0.28f
+        val inner = size.minDimension * 0.10f
+        drawCircle(color = color, radius = outer, center = center, style = stroke)
+        drawCircle(color = color, radius = inner, center = center, style = stroke)
+        val tickStart = size.minDimension * 0.37f
+        val tickEnd = size.minDimension * 0.45f
+        listOf(
+            Offset(0f, -1f) to Offset(0f, 1f),
+            Offset(1f, 0f) to Offset(-1f, 0f),
+            Offset(0.71f, 0.71f) to Offset(-0.71f, -0.71f),
+            Offset(0.71f, -0.71f) to Offset(-0.71f, 0.71f),
+        ).forEach { (positive, negative) ->
+            drawLine(color, center + positive * tickStart, center + positive * tickEnd, strokeWidth = stroke.width, cap = StrokeCap.Round)
+            drawLine(color, center + negative * tickStart, center + negative * tickEnd, strokeWidth = stroke.width, cap = StrokeCap.Round)
+        }
+    }
+}
+
+@Composable
+private fun RefreshIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val scale = size.minDimension / 24f
+        val path = Path().apply {
+            moveTo(17.65f * scale, 6.35f * scale)
+            cubicTo(16.2f * scale, 4.9f * scale, 14.21f * scale, 4f * scale, 12f * scale, 4f * scale)
+            cubicTo(7.58f * scale, 4f * scale, 4.01f * scale, 7.58f * scale, 4.01f * scale, 12f * scale)
+            cubicTo(4.01f * scale, 16.42f * scale, 7.58f * scale, 20f * scale, 12f * scale, 20f * scale)
+            cubicTo(15.73f * scale, 20f * scale, 18.84f * scale, 17.45f * scale, 19.73f * scale, 14f * scale)
+            lineTo(17.65f * scale, 14f * scale)
+            cubicTo(16.83f * scale, 16.33f * scale, 14.61f * scale, 18f * scale, 12f * scale, 18f * scale)
+            cubicTo(8.69f * scale, 18f * scale, 6f * scale, 15.31f * scale, 6f * scale, 12f * scale)
+            cubicTo(6f * scale, 8.69f * scale, 8.69f * scale, 6f * scale, 12f * scale, 6f * scale)
+            cubicTo(13.66f * scale, 6f * scale, 15.14f * scale, 6.69f * scale, 16.22f * scale, 7.78f * scale)
+            lineTo(13f * scale, 11f * scale)
+            lineTo(20f * scale, 11f * scale)
+            lineTo(20f * scale, 4f * scale)
+            close()
+        }
+        drawPath(path, color = color)
+    }
+}
+
+@Composable
+private fun QueueIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val strokeWidth = 1.9.dp.toPx()
+        listOf(0.28f, 0.50f, 0.72f).forEach { y ->
+            drawCircle(color, radius = size.minDimension * 0.035f, center = Offset(size.width * 0.18f, size.height * y))
+            drawLine(
+                color,
+                Offset(size.width * 0.32f, size.height * y),
+                Offset(size.width * 0.84f, size.height * y),
+                strokeWidth,
+                cap = StrokeCap.Round,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val strokeWidth = 1.9.dp.toPx()
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.25f,
+            center = Offset(size.width * 0.44f, size.height * 0.43f),
+            style = Stroke(width = strokeWidth),
+        )
+        drawLine(
+            color,
+            Offset(size.width * 0.62f, size.height * 0.62f),
+            Offset(size.width * 0.82f, size.height * 0.82f),
+            strokeWidth,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+@Composable
+private fun StopIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        drawRect(
+            color = color,
+            topLeft = Offset(size.width * 0.31f, size.height * 0.31f),
+            size = Size(size.width * 0.38f, size.height * 0.38f),
+        )
+    }
+}
+
+@Composable
+private fun AddFolderIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val folder = Path().apply {
+            moveTo(size.width * 0.12f, size.height * 0.34f)
+            lineTo(size.width * 0.38f, size.height * 0.34f)
+            lineTo(size.width * 0.46f, size.height * 0.43f)
+            lineTo(size.width * 0.88f, size.height * 0.43f)
+            lineTo(size.width * 0.88f, size.height * 0.78f)
+            lineTo(size.width * 0.12f, size.height * 0.78f)
+            close()
+        }
+        drawPath(folder, color = color, style = stroke)
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.60f), Offset(size.width * 0.72f, size.height * 0.60f), stroke.width, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.61f, size.height * 0.49f), Offset(size.width * 0.61f, size.height * 0.71f), stroke.width, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun UploadIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val strokeWidth = 1.9.dp.toPx()
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.78f), Offset(size.width * 0.50f, size.height * 0.22f), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.22f), Offset(size.width * 0.30f, size.height * 0.42f), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.22f), Offset(size.width * 0.70f, size.height * 0.42f), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.24f, size.height * 0.82f), Offset(size.width * 0.76f, size.height * 0.82f), strokeWidth, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun DownloadIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val strokeWidth = 1.9.dp.toPx()
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.18f), Offset(size.width * 0.50f, size.height * 0.74f), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.74f), Offset(size.width * 0.30f, size.height * 0.54f), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.50f, size.height * 0.74f), Offset(size.width * 0.70f, size.height * 0.54f), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width * 0.24f, size.height * 0.82f), Offset(size.width * 0.76f, size.height * 0.82f), strokeWidth, cap = StrokeCap.Round)
     }
 }
 

@@ -53,6 +53,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -113,6 +115,7 @@ import com.dimonoso.crosplatformfilesender.remote.RemoteFileDeleteResult
 import com.dimonoso.crosplatformfilesender.remote.RemoteDeletePromptDecision
 import com.dimonoso.crosplatformfilesender.settings.AppLanguageMode
 import com.dimonoso.crosplatformfilesender.settings.AppSettings
+import com.dimonoso.crosplatformfilesender.settings.AppThemeMode
 import com.dimonoso.crosplatformfilesender.settings.BackupMode
 import com.dimonoso.crosplatformfilesender.settings.getSystemLanguageCode
 import com.dimonoso.crosplatformfilesender.settings.isDiscoveryKeywordChar
@@ -217,6 +220,9 @@ import crosplatformfilesender.shared.generated.resources.status_pending
 import crosplatformfilesender.shared.generated.resources.status_running
 import crosplatformfilesender.shared.generated.resources.task_cancel
 import crosplatformfilesender.shared.generated.resources.task_error
+import crosplatformfilesender.shared.generated.resources.theme
+import crosplatformfilesender.shared.generated.resources.theme_dark
+import crosplatformfilesender.shared.generated.resources.theme_light
 import crosplatformfilesender.shared.generated.resources.to_roots
 import crosplatformfilesender.shared.generated.resources.to_whitelist
 import crosplatformfilesender.shared.generated.resources.transfer_direction_download
@@ -240,6 +246,10 @@ fun App() {
     val settings by services.settings.settings.collectAsState()
     val systemLanguageCode = remember { getSystemLanguageCode() }
     val resolvedLanguage = resolveAppLanguage(settings.languageMode, systemLanguageCode)
+    val colorScheme = when (settings.themeMode) {
+        AppThemeMode.Dark -> darkColorScheme()
+        AppThemeMode.Light -> lightColorScheme()
+    }
     var showQueueDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
@@ -255,7 +265,7 @@ fun App() {
     }
 
     AppLocaleEnvironment(resolvedLanguage.localeTag) {
-        MaterialTheme {
+        MaterialTheme(colorScheme = colorScheme) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background,
@@ -1634,6 +1644,11 @@ private fun SettingsSection(services: AppServices) {
             onModeChange = services.settings::updateLanguageMode,
         )
         HorizontalDivider()
+        ThemeSettings(
+            currentMode = settings.themeMode,
+            onModeChange = services.settings::updateThemeMode,
+        )
+        HorizontalDivider()
         KeywordSettings(
             keyword = settings.discoveryKeyword,
             keywordDraft = keywordDraft,
@@ -1772,6 +1787,52 @@ private fun LanguageModeButton(
             Text(label)
         }
     }
+}
+
+@Composable
+private fun ThemeSettings(
+    currentMode: AppThemeMode,
+    onModeChange: (AppThemeMode) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = stringResource(Res.string.theme),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeModeButton(
+                mode = AppThemeMode.Dark,
+                label = stringResource(Res.string.theme_dark),
+                selectedMode = currentMode,
+                onModeChange = onModeChange,
+                icon = { MoonIcon() },
+            )
+            ThemeModeButton(
+                mode = AppThemeMode.Light,
+                label = stringResource(Res.string.theme_light),
+                selectedMode = currentMode,
+                onModeChange = onModeChange,
+                icon = { SunIcon() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeButton(
+    mode: AppThemeMode,
+    label: String,
+    selectedMode: AppThemeMode,
+    onModeChange: (AppThemeMode) -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    IconActionButton(
+        label = label,
+        onClick = { onModeChange(mode) },
+        variant = if (selectedMode == mode) IconButtonVariant.Filled else IconButtonVariant.Outlined,
+        icon = icon,
+    )
 }
 
 @Composable
@@ -2549,6 +2610,64 @@ private fun IconActionButton(
             ) {
                 icon()
             }
+        }
+    }
+}
+
+@Composable
+private fun MoonIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val scale = size.minDimension / 24f
+        val path = Path().apply {
+            moveTo(21f * scale, 12.8f * scale)
+            cubicTo(20.3f * scale, 17.4f * scale, 16.4f * scale, 21f * scale, 11.6f * scale, 21f * scale)
+            cubicTo(6.9f * scale, 21f * scale, 3f * scale, 17.1f * scale, 3f * scale, 12.4f * scale)
+            cubicTo(3f * scale, 7.7f * scale, 6.6f * scale, 3.8f * scale, 11.2f * scale, 3f * scale)
+            cubicTo(10.4f * scale, 4.1f * scale, 10f * scale, 5.5f * scale, 10f * scale, 7f * scale)
+            cubicTo(10f * scale, 10.9f * scale, 13.1f * scale, 14f * scale, 17f * scale, 14f * scale)
+            cubicTo(18.5f * scale, 14f * scale, 19.9f * scale, 13.6f * scale, 21f * scale, 12.8f * scale)
+            close()
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
+    }
+}
+
+@Composable
+private fun SunIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+
+    Canvas(modifier = modifier.size(22.dp)) {
+        val strokeWidth = 1.8.dp.toPx()
+        val center = Offset(size.width * 0.5f, size.height * 0.5f)
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.18f,
+            center = center,
+            style = Stroke(width = strokeWidth),
+        )
+        listOf(
+            Offset(0f, -1f),
+            Offset(0.71f, -0.71f),
+            Offset(1f, 0f),
+            Offset(0.71f, 0.71f),
+            Offset(0f, 1f),
+            Offset(-0.71f, 0.71f),
+            Offset(-1f, 0f),
+            Offset(-0.71f, -0.71f),
+        ).forEach { direction ->
+            drawLine(
+                color = color,
+                start = center + direction * (size.minDimension * 0.33f),
+                end = center + direction * (size.minDimension * 0.43f),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+            )
         }
     }
 }

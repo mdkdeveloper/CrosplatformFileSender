@@ -11,6 +11,7 @@ internal object SettingsConfigCodec {
     private const val AutoSearchDevicesOnStartupKey = "discovery.autoSearchOnStartup"
     private const val WhitelistCountKey = "whitelist.count"
     private const val LanguageKey = "ui.language"
+    private const val ThemeKey = "ui.theme"
     private const val MaxOutgoingTransfersKey = "transfer.maxOutgoing"
     private const val MaxIncomingTransfersKey = "transfer.maxIncoming"
     private const val BackupModeKey = "backup.mode"
@@ -24,6 +25,7 @@ internal object SettingsConfigCodec {
             appendLine("$KeywordKey=${settings.discoveryKeyword.escapeConfigValue()}")
             appendLine("$AutoSearchDevicesOnStartupKey=${settings.autoSearchDevicesOnStartup}")
             appendLine("$LanguageKey=${settings.languageMode.configValue}")
+            appendLine("$ThemeKey=${settings.themeMode.configValue}")
             appendLine("$MaxOutgoingTransfersKey=${settings.maxOutgoingTransfers.normalizeTransferLimit()}")
             appendLine("$MaxIncomingTransfersKey=${settings.maxIncomingTransfers.normalizeTransferLimit()}")
             appendLine("$BackupModeKey=${settings.backupMode.configValue}")
@@ -63,6 +65,7 @@ internal object SettingsConfigCodec {
             ?.takeIf(::isValidDeviceDisplayName)
             .orEmpty()
         val languageMode = AppLanguageMode.fromConfigValue(properties[LanguageKey])
+        val themeMode = AppThemeMode.fromConfigValue(properties[ThemeKey])
         val maxOutgoingTransfers = properties[MaxOutgoingTransfersKey]
             ?.toIntOrNull()
             ?.normalizeTransferLimit()
@@ -93,6 +96,7 @@ internal object SettingsConfigCodec {
             autoSearchDevicesOnStartup = autoSearchDevicesOnStartup,
             whitelistFolders = folders,
             languageMode = languageMode,
+            themeMode = themeMode,
             maxOutgoingTransfers = maxOutgoingTransfers,
             maxIncomingTransfers = maxIncomingTransfers,
             backupMode = backupMode,

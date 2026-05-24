@@ -97,6 +97,43 @@ class SettingsConfigCodecTest {
     }
 
     @Test
+    fun settingsDecodeUsesDarkThemeWhenMissing() {
+        val decoded = SettingsConfigCodec.decode("discovery.keyword=local-secret")
+
+        assertEquals(AppThemeMode.Dark, decoded.themeMode)
+    }
+
+    @Test
+    fun settingsDecodeFallsBackToDarkThemeWhenInvalid() {
+        val decoded = SettingsConfigCodec.decode(
+            """
+            discovery.keyword=local-secret
+            ui.theme=system
+            """.trimIndent(),
+        )
+
+        assertEquals(AppThemeMode.Dark, decoded.themeMode)
+    }
+
+    @Test
+    fun settingsThemeModeRoundTripKeepsSupportedModes() {
+        listOf(
+            AppThemeMode.Dark,
+            AppThemeMode.Light,
+        ).forEach { mode ->
+            val settings = AppSettings(
+                localDeviceId = "device-theme-test",
+                discoveryKeyword = "local-secret",
+                themeMode = mode,
+            )
+
+            val decoded = SettingsConfigCodec.decode(SettingsConfigCodec.encode(settings))
+
+            assertEquals(mode, decoded.themeMode)
+        }
+    }
+
+    @Test
     fun startupDeviceSearchRoundTripKeepsDefaultAndEnabledValues() {
         assertFalse(SettingsConfigCodec.decode("discovery.keyword=local-secret").autoSearchDevicesOnStartup)
 
@@ -244,6 +281,17 @@ class SettingsConfigCodecTest {
 
         val decoded = SettingsConfigCodec.decode(store.contents.orEmpty())
         assertEquals(AppLanguageMode.English, decoded.languageMode)
+    }
+
+    @Test
+    fun settingsServicePersistsThemeChanges() {
+        val store = InMemorySettingsStore(null)
+        val service = PersistentSettingsService(store)
+
+        service.updateThemeMode(AppThemeMode.Light)
+
+        val decoded = SettingsConfigCodec.decode(store.contents.orEmpty())
+        assertEquals(AppThemeMode.Light, decoded.themeMode)
     }
 
     @Test

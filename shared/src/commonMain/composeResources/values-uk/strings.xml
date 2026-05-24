@@ -120,4 +120,7 @@
     <string name="remote_error_network">Не вдалося підключитися до віддаленого списку файлів: %1$s</string>
     <string name="remote_error_server_unavailable">Віддалений список файлів недоступний: %1$s</string>
     <string name="remote_error_unknown">Помилка віддаленого списку файлів: %1$s</string>
+    <string name="theme">Тема</string>
+    <string name="theme_dark">Темна тема</string>
+    <string name="theme_light">Світла тема</string>
 </resources>

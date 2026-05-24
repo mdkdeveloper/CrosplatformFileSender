@@ -24,6 +24,18 @@ enum class BackupMode(
     }
 }
 
+enum class AppThemeMode(
+    val configValue: String,
+) {
+    Dark("dark"),
+    Light("light");
+
+    companion object {
+        fun fromConfigValue(value: String?): AppThemeMode =
+            entries.firstOrNull { it.configValue == value } ?: Dark
+    }
+}
+
 data class AppSettings(
     val localDeviceId: String = createLocalDeviceId(),
     val deviceDisplayName: String = "",
@@ -31,6 +43,7 @@ data class AppSettings(
     val autoSearchDevicesOnStartup: Boolean = false,
     val whitelistFolders: List<WhitelistFolder> = emptyList(),
     val languageMode: AppLanguageMode = AppLanguageMode.System,
+    val themeMode: AppThemeMode = AppThemeMode.Dark,
     val maxOutgoingTransfers: Int = DefaultMaxParallelTransfers,
     val maxIncomingTransfers: Int = DefaultMaxParallelTransfers,
     val backupMode: BackupMode = BackupMode.BackupFolder,
@@ -49,6 +62,8 @@ interface SettingsService {
     fun updateWhitelistFolders(folders: List<WhitelistFolder>)
 
     fun updateLanguageMode(mode: AppLanguageMode)
+
+    fun updateThemeMode(mode: AppThemeMode)
 
     fun updateMaxOutgoingTransfers(value: Int)
 
@@ -108,6 +123,10 @@ internal class PersistentSettingsService(
 
     override fun updateLanguageMode(mode: AppLanguageMode) {
         replace(_settings.value.copy(languageMode = mode))
+    }
+
+    override fun updateThemeMode(mode: AppThemeMode) {
+        replace(_settings.value.copy(themeMode = mode))
     }
 
     override fun updateMaxOutgoingTransfers(value: Int) {

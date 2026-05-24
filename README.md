@@ -28,6 +28,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Archive folders before transfer when needed.
 - Keep backup archives for received or replaced files, depending on the selected backup mode.
 - Switch between system language, English, and Ukrainian.
+- Use a dark theme by default and switch between dark and light themes in Settings.
 
 ## Requirements
 

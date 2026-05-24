@@ -1,0 +1,7 @@
+interface:
+  display_name: "Backlog"
+  short_description: "Manage local backlog task files"
+  default_prompt: "Use $backlog to create, update, list, complete, or explicitly delete repository backlog tasks."
+
+policy:
+  allow_implicit_invocation: false

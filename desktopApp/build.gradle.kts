@@ -23,6 +23,16 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.dimonoso.crosplatformfilesender"
             packageVersion = "1.0.0"
+
+            windows {
+                iconFile.set(project.file("src/main/resources/icons/app-icon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("src/main/resources/icons/app-icon.icns"))
+            }
+            linux {
+                iconFile.set(project.file("src/main/resources/icons/app-icon.png"))
+            }
         }
     }
 }

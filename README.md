@@ -20,6 +20,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - On Android, select files and folders with checkboxes inside opened folders; root folders are opened by tapping and are not selectable.
 - Drag files and folders between the local and remote file panes to upload or download them.
 - On desktop, drop files and folders from the system file manager into the remote file pane to send them.
+- On desktop, edit or paste paths directly in file panes; on Android, tap the displayed path to copy it.
 - Track active, paused, completed, failed, and cancelled transfers in a queue.
 - Refresh open file panes after successful in-app transfers.
 - Limit parallel incoming and outgoing transfers.
@@ -123,8 +124,9 @@ On macOS, check Java with `java -version` and list installed JDKs with `/usr/lib
 7. Open a destination folder in the receiving file pane. The root view is not a transfer destination.
 8. Use Send selected or Download selected, or drag files and folders between the local and remote panes.
 9. In the desktop app, you can also drop files and folders from the system file manager into the remote pane to send them.
-10. Select file-browser items and press `Delete` to request deletion from the active pane.
-11. Open the transfer queue to pause, resume, cancel, or check progress.
+10. On desktop, edit a pane's path field and press Enter, or click elsewhere, to navigate to that path. On Android, tap the displayed path to copy it.
+11. Select file-browser items and press `Delete` to request deletion from the active pane.
+12. Open the transfer queue to pause, resume, cancel, or check progress.
 
 ## Sharing and safety notes
 

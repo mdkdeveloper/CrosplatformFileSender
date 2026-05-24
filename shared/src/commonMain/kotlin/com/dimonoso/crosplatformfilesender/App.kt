@@ -3,6 +3,7 @@
 package com.dimonoso.crosplatformfilesender
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -72,10 +73,12 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -92,6 +95,8 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -236,6 +241,7 @@ import crosplatformfilesender.shared.generated.resources.transfer_subtitle
 import crosplatformfilesender.shared.generated.resources.type_column
 import crosplatformfilesender.shared.generated.resources.whitelist_empty
 import crosplatformfilesender.shared.generated.resources.whitelist_folders
+import crosplatformfilesender.shared.generated.resources.whitelist_path_unavailable
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -605,6 +611,8 @@ private fun FileBrowserColumns(
     var remoteState by remember(selectedDevice?.id) { mutableStateOf<RemotePaneState>(RemotePaneState.Idle) }
     var transferError by remember { mutableStateOf<String?>(null) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var localPathError by remember { mutableStateOf<String?>(null) }
+    var remotePathError by remember(selectedDevice?.id) { mutableStateOf<String?>(null) }
     var pendingLocalDeleteEntries by remember { mutableStateOf<List<FileEntry>?>(null) }
     var pendingDownloadItems by remember { mutableStateOf<List<TransferItem>?>(null) }
     var activeDragPayload by remember { mutableStateOf<FilePaneDragPayload?>(null) }
@@ -616,6 +624,7 @@ private fun FileBrowserColumns(
     val coroutineScope = rememberCoroutineScope()
     val invalidDestinationText = stringResource(Res.string.invalid_transfer_destination)
     val deleteProblemText = stringResource(Res.string.delete_problem)
+    val pathUnavailableText = stringResource(Res.string.whitelist_path_unavailable)
     val shouldPromptStorageAccess = storageAccessState.requiresRuntimeApproval && !storageAccessState.isGranted
     val useAndroidFileSelection = services.platform.deviceInfo.family == PlatformFamily.Android
     val localDisplayPath = if (localPath?.let(::isLocalWhitelistRootPath) == true) {
@@ -717,6 +726,59 @@ private fun FileBrowserColumns(
         deleteError = result.firstProblem?.let { problem -> "$deleteProblemText ${problem.message}" }
     }
 
+    fun applyLocalPathInput(input: String) {
+        val requestedPath = input.trim()
+        if (requestedPath.isEmpty()) {
+            localPath = null
+            localPathStack = emptyList()
+            localSelection = FileBrowserSelection()
+            localPathError = null
+            return
+        }
+
+        val metadata = services.platform.fileSystem.metadata(requestedPath)
+        if (metadata?.isBrowseable == true) {
+            localPath = metadata.path
+            localPathStack = emptyList()
+            localSelection = FileBrowserSelection()
+            localPathError = null
+        } else {
+            localPathError = pathUnavailableText
+        }
+    }
+
+    fun applyRemotePathInput(input: String) {
+        val requestedPath = input.trim()
+        if (requestedPath.isEmpty()) {
+            remotePath = null
+            remotePathStack = emptyList()
+            remoteSelection = FileBrowserSelection()
+            remotePathError = null
+            return
+        }
+
+        val device = selectedDevice
+        if (device == null) {
+            remotePathError = pathUnavailableText
+            return
+        }
+
+        coroutineScope.launch {
+            when (val result = services.remoteFileCatalog.browse(device, requestedPath)) {
+                is RemoteFileCatalogResult.Success -> {
+                    remotePath = requestedPath
+                    remotePathStack = emptyList()
+                    remoteSelection = FileBrowserSelection()
+                    remotePathError = null
+                    remoteState = RemotePaneState.Loaded(result.entries)
+                }
+                is RemoteFileCatalogResult.Failure -> {
+                    remotePathError = pathUnavailableText
+                }
+            }
+        }
+    }
+
     fun requestDelete(side: FilePaneSide) {
         when (side) {
             FilePaneSide.Local -> {
@@ -767,11 +829,14 @@ private fun FileBrowserColumns(
             emptyText = stringResource(Res.string.empty_or_limited_access),
             modifier = modifier,
             rootLabel = stringResource(Res.string.to_roots),
+            pathError = localPathError,
+            onPathSubmit = ::applyLocalPathInput,
             onRootClick = if (localPath == null) null else {
                 {
                     localPath = null
                     localPathStack = emptyList()
                     localSelection = FileBrowserSelection()
+                    localPathError = null
                 }
             },
             onParentClick = if (localPath == null) null else {
@@ -779,6 +844,7 @@ private fun FileBrowserColumns(
                     localPath = localPathStack.lastOrNull()
                     localPathStack = localPathStack.dropLast(1)
                     localSelection = FileBrowserSelection()
+                    localPathError = null
                 }
             },
             onRefresh = { localReloadToken += 1 },
@@ -799,6 +865,7 @@ private fun FileBrowserColumns(
                 localPathStack = localPathStack + localPath
                 localPath = entry.path
                 localSelection = FileBrowserSelection()
+                localPathError = null
             },
             useAndroidFileSelection = useAndroidFileSelection,
             noticeContent = if (shouldPromptStorageAccess) {
@@ -843,11 +910,14 @@ private fun FileBrowserColumns(
             rootLabel = stringResource(Res.string.to_whitelist),
             isLoading = remoteState is RemotePaneState.Loading,
             errorText = (remoteState as? RemotePaneState.Failed)?.let { remoteFileCatalogErrorText(it.error) },
+            pathError = remotePathError,
+            onPathSubmit = ::applyRemotePathInput,
             onRootClick = if (remotePath == null) null else {
                 {
                     remotePath = null
                     remotePathStack = emptyList()
                     remoteSelection = FileBrowserSelection()
+                    remotePathError = null
                 }
             },
             onParentClick = if (remotePath == null) null else {
@@ -855,6 +925,7 @@ private fun FileBrowserColumns(
                     remotePath = remotePathStack.lastOrNull()
                     remotePathStack = remotePathStack.dropLast(1)
                     remoteSelection = FileBrowserSelection()
+                    remotePathError = null
                 }
             },
             onRefresh = {
@@ -884,6 +955,7 @@ private fun FileBrowserColumns(
                 remotePathStack = remotePathStack + remotePath
                 remotePath = entry.path
                 remoteSelection = FileBrowserSelection()
+                remotePathError = null
             },
             useAndroidFileSelection = useAndroidFileSelection,
             topRowContent = {
@@ -1027,6 +1099,8 @@ private fun FileBrowserPane(
     rootLabel: String,
     isLoading: Boolean = false,
     errorText: String? = null,
+    pathError: String? = null,
+    onPathSubmit: (String) -> Unit,
     onRootClick: (() -> Unit)?,
     onParentClick: (() -> Unit)?,
     onRefresh: () -> Unit,
@@ -1046,6 +1120,7 @@ private fun FileBrowserPane(
     topRowContent: @Composable () -> Unit = {},
 ) {
     var isDropTargetHovered by remember(side) { mutableStateOf(false) }
+    var isPathInputFocused by remember(side) { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val latestDragPayload = rememberUpdatedState(activeDragPayload)
     val latestOnDragEnded = rememberUpdatedState(onDragEnded)
@@ -1088,7 +1163,12 @@ private fun FileBrowserPane(
         modifier = modifier
             .heightIn(min = 420.dp)
             .onPreviewKeyEvent { event ->
-                if (deleteKeyEnabled && event.type == KeyEventType.KeyDown && event.key == Key.Delete) {
+                if (
+                    deleteKeyEnabled &&
+                    !isPathInputFocused &&
+                    event.type == KeyEventType.KeyDown &&
+                    event.key == Key.Delete
+                ) {
                     onDelete()
                     true
                 } else {
@@ -1127,13 +1207,13 @@ private fun FileBrowserPane(
         ) {
             if (useAndroidFileSelection) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        text = path.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    FilePanePathControl(
+                        title = title,
+                        path = path,
+                        isEditable = false,
+                        pathError = pathError,
+                        onFocusedChange = { isPathInputFocused = it },
+                        onPathSubmit = onPathSubmit,
                     )
                 }
                 FlowRow(
@@ -1162,13 +1242,13 @@ private fun FileBrowserPane(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            text = path.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        FilePanePathControl(
+                            title = title,
+                            path = path,
+                            isEditable = true,
+                            pathError = pathError,
+                            onFocusedChange = { isPathInputFocused = it },
+                            onPathSubmit = onPathSubmit,
                         )
                     }
                     onRootClick?.let { click ->
@@ -1215,6 +1295,131 @@ private fun FileBrowserPane(
             }
         }
     }
+}
+
+@Composable
+private fun FilePanePathControl(
+    title: String,
+    path: String?,
+    isEditable: Boolean,
+    pathError: String?,
+    onFocusedChange: (Boolean) -> Unit,
+    onPathSubmit: (String) -> Unit,
+) {
+    val displayPath = path.orEmpty()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        if (isEditable) {
+            EditableFilePanePath(
+                path = displayPath,
+                pathError = pathError,
+                onFocusedChange = onFocusedChange,
+                onPathSubmit = onPathSubmit,
+            )
+        } else {
+            CopyableFilePanePath(path = displayPath)
+        }
+    }
+}
+
+@Composable
+private fun EditableFilePanePath(
+    path: String,
+    pathError: String?,
+    onFocusedChange: (Boolean) -> Unit,
+    onPathSubmit: (String) -> Unit,
+) {
+    var draftPath by remember { mutableStateOf(path) }
+    var isFocused by remember { mutableStateOf(false) }
+    var lastSubmittedPath by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(path) {
+        draftPath = path
+        lastSubmittedPath = null
+    }
+
+    fun submitDraft() {
+        val submittedPath = draftPath.trim()
+        if (submittedPath == path.trim() || submittedPath == lastSubmittedPath) return
+        lastSubmittedPath = submittedPath
+        onPathSubmit(submittedPath)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = RoundedCornerShape(4.dp),
+            border = BorderStroke(
+                1.dp,
+                if (pathError == null) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error,
+            ),
+        ) {
+            BasicTextField(
+                value = draftPath,
+                onValueChange = { value ->
+                    draftPath = value
+                    if (value.trim() != lastSubmittedPath) {
+                        lastSubmittedPath = null
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                    .onFocusChanged { focusState ->
+                        if (isFocused && !focusState.isFocused) {
+                            submitDraft()
+                        }
+                        isFocused = focusState.isFocused
+                        onFocusedChange(focusState.isFocused)
+                    }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                            submitDraft()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            )
+        }
+        pathError?.let { error ->
+            Text(
+                text = error,
+                modifier = Modifier.padding(start = 12.dp, top = 2.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+@Suppress("DEPRECATION")
+private fun CopyableFilePanePath(path: String) {
+    val clipboardManager = LocalClipboardManager.current
+    Text(
+        text = path,
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {
+                    if (path.isNotBlank()) {
+                        clipboardManager.setText(AnnotatedString(path))
+                    }
+                },
+            ),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable

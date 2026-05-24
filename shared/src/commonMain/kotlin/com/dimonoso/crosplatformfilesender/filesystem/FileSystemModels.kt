@@ -19,6 +19,11 @@ data class FileEntry(
     val isBrowseable: Boolean = type == FileEntryType.Drive || type == FileEntryType.Directory,
 )
 
+internal const val LocalWhitelistRootPath = "cfs://local-whitelist"
+
+internal fun isLocalWhitelistRootPath(path: String): Boolean =
+    path == LocalWhitelistRootPath
+
 data class WhitelistFolder(
     val id: String,
     val displayName: String,
@@ -115,6 +120,8 @@ interface FileSystemService {
 
     fun setWhitelistEnabled(folderId: String, enabled: Boolean)
 
+    fun isWhitelistFolderPathAvailable(folderId: String): Boolean
+
     fun setWhitelistDeletePolicyOverride(folderId: String, deletePolicyOverride: WhitelistDeletePolicyOverride)
 
     fun browseWhitelisted(path: String? = null): List<FileEntry>
@@ -137,17 +144,37 @@ class InMemoryFileSystemService(
     initialWhitelist: List<WhitelistFolder> = emptyList(),
     private val onWhitelistChanged: (List<WhitelistFolder>) -> Unit = {},
 ) : FileSystemService {
-    private val _whitelist = kotlinx.coroutines.flow.MutableStateFlow(initialWhitelist)
+    private val _whitelist = kotlinx.coroutines.flow.MutableStateFlow(initialWhitelist.disableUnavailableFolders())
 
     override val whitelist: StateFlow<List<WhitelistFolder>> = _whitelist
 
-    override fun localRoots(): List<FileEntry> = platformFileSystem.roots()
+    init {
+        if (_whitelist.value != initialWhitelist) {
+            onWhitelistChanged(_whitelist.value)
+        }
+    }
 
-    override fun browseLocal(path: String): List<FileEntry> = platformFileSystem.list(path)
+    override fun localRoots(): List<FileEntry> =
+        if (localWhitelistEntries().isEmpty()) {
+            platformFileSystem.roots()
+        } else {
+            platformFileSystem.roots() + FileEntry(
+                path = LocalWhitelistRootPath,
+                name = "Whitelist",
+                type = FileEntryType.Directory,
+            )
+        }
+
+    override fun browseLocal(path: String): List<FileEntry> =
+        if (isLocalWhitelistRootPath(path)) {
+            localWhitelistEntries()
+        } else {
+            platformFileSystem.list(path)
+        }
 
     override fun addWhitelistFolder(folder: WhitelistFolder) {
         val existing = _whitelist.value.filterNot { it.id == folder.id || samePath(it.path, folder.path) }
-        replaceWhitelist(existing + folder)
+        replaceWhitelist(existing + folder.withUnavailablePathDisabled())
     }
 
     override fun removeWhitelistFolder(folderId: String) {
@@ -156,9 +183,16 @@ class InMemoryFileSystemService(
 
     override fun setWhitelistEnabled(folderId: String, enabled: Boolean) {
         replaceWhitelist(_whitelist.value.map { folder ->
-            if (folder.id == folderId) folder.copy(enabled = enabled) else folder
+            if (folder.id == folderId) {
+                folder.copy(enabled = enabled && folder.isPathAvailable())
+            } else {
+                folder
+            }
         })
     }
+
+    override fun isWhitelistFolderPathAvailable(folderId: String): Boolean =
+        _whitelist.value.firstOrNull { it.id == folderId }?.isPathAvailable() == true
 
     override fun setWhitelistDeletePolicyOverride(folderId: String, deletePolicyOverride: WhitelistDeletePolicyOverride) {
         replaceWhitelist(_whitelist.value.map { folder ->
@@ -173,7 +207,7 @@ class InMemoryFileSystemService(
         }
 
     override fun browseWhitelistedResult(path: String?): WhitelistedBrowseResult {
-        val enabledFolders = _whitelist.value.filter { it.enabled }
+        val enabledFolders = enabledAvailableWhitelistFolders()
         if (path == null) {
             return WhitelistedBrowseResult.Success(
                 enabledFolders.map { folder ->
@@ -205,8 +239,8 @@ class InMemoryFileSystemService(
         FileDeleteBatchResult(paths.distinct().map(::moveLocalPathToTrash))
 
     override fun effectiveRemoteDeletePolicy(path: String, defaultPolicy: RemoteDeletePolicy): RemoteDeletePolicy? {
-        val containingFolders = _whitelist.value
-            .filter { folder -> folder.enabled && isInside(path, folder.path) }
+        val containingFolders = enabledAvailableWhitelistFolders()
+            .filter { folder -> isInside(path, folder.path) }
             .sortedByDescending { folder -> normalizePath(folder.path).length }
         if (containingFolders.isEmpty()) return null
 
@@ -262,7 +296,7 @@ class InMemoryFileSystemService(
 
     private fun remoteDeleteRefusal(path: String): String? =
         when {
-            _whitelist.value.none { folder -> folder.enabled && isInside(path, folder.path) } ->
+            enabledAvailableWhitelistFolders().none { folder -> isInside(path, folder.path) } ->
                 "The selected item is outside the whitelist."
             isProtectedRoot(path) -> "Whitelist folders cannot be deleted."
             platformFileSystem.metadata(path) == null -> "The selected item was not found."
@@ -270,16 +304,22 @@ class InMemoryFileSystemService(
         }
 
     private fun isProtectedRoot(path: String): Boolean =
-        _whitelist.value.any { folder -> samePath(path, folder.path) }
+        _whitelist.value.any { folder -> folder.path.isNotBlank() && samePath(path, folder.path) }
 
     private fun isLocalFileSystemRoot(path: String): Boolean =
-        platformFileSystem.roots().any { root -> samePath(path, root.path) } ||
+        isLocalWhitelistRootPath(path) ||
+            platformFileSystem.roots().any { root -> samePath(path, root.path) } ||
             platformFileSystem.metadata(path)?.type == FileEntryType.Drive
 
     private fun samePath(left: String, right: String): Boolean =
-        normalizePath(left).equals(normalizePath(right), ignoreCase = true)
+        if (left.isBlank() || right.isBlank()) {
+            left.isBlank() && right.isBlank()
+        } else {
+            normalizePath(left).equals(normalizePath(right), ignoreCase = true)
+        }
 
     private fun isInside(path: String, root: String): Boolean {
+        if (root.isBlank()) return false
         val normalizedPath = normalizePath(path)
         val normalizedRoot = normalizePath(root)
         return normalizedPath == normalizedRoot || normalizedPath.startsWith("$normalizedRoot/")
@@ -292,9 +332,39 @@ class InMemoryFileSystemService(
     }
 
     private fun replaceWhitelist(folders: List<WhitelistFolder>) {
-        _whitelist.value = folders
-        onWhitelistChanged(folders)
+        val normalized = folders.disableUnavailableFolders()
+        _whitelist.value = normalized
+        onWhitelistChanged(normalized)
     }
+
+    private fun List<WhitelistFolder>.disableUnavailableFolders(): List<WhitelistFolder> =
+        map { folder -> folder.withUnavailablePathDisabled() }
+
+    private fun WhitelistFolder.withUnavailablePathDisabled(): WhitelistFolder =
+        if (enabled && !isPathAvailable()) copy(enabled = false) else this
+
+    private fun enabledAvailableWhitelistFolders(): List<WhitelistFolder> =
+        _whitelist.value.filter { folder -> folder.enabled && folder.isPathAvailable() }
+
+    private fun localWhitelistEntries(): List<FileEntry> =
+        _whitelist.value.mapNotNull { folder -> folder.toLocalWhitelistEntry() }
+
+    private fun WhitelistFolder.toLocalWhitelistEntry(): FileEntry? {
+        val metadata = pathMetadata() ?: return null
+        return FileEntry(
+            path = path,
+            name = displayName.ifBlank { metadata.name },
+            type = metadata.type,
+            sizeBytes = metadata.sizeBytes,
+            isBrowseable = metadata.isBrowseable,
+        )
+    }
+
+    private fun WhitelistFolder.isPathAvailable(): Boolean =
+        pathMetadata() != null
+
+    private fun WhitelistFolder.pathMetadata(): FileEntry? =
+        path.takeIf { it.isNotBlank() }?.let(platformFileSystem::metadata)
 }
 
 private fun String.deleted(): FileDeleteResult =

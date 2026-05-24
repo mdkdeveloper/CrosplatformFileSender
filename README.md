@@ -24,6 +24,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Refresh open file panes after successful in-app transfers.
 - Limit parallel incoming and outgoing transfers.
 - Share only selected folders through the whitelist.
+- Open the local Whitelist root to jump quickly to existing whitelist folders, including disabled ones.
 - Delete selected local or remote file-browser items with the `Delete` key using local confirmation and remote whitelist policies.
 - Archive folders before transfer when needed.
 - Keep backup archives for received or replaced files, depending on the selected backup mode.
@@ -128,6 +129,8 @@ On macOS, check Java with `java -version` and list installed JDKs with `/usr/lib
 ## Sharing and safety notes
 
 Only whitelisted folders are exposed to other devices. If no whitelist folder is enabled, other devices may discover this device but will not be able to browse useful remote files.
+
+The local file browser shows a Whitelist root when at least one whitelist folder path still exists. Missing or empty whitelist paths are hidden there and cannot be enabled until the path exists again.
 
 The discovery keyword is used to match devices on the LAN. Devices with different keywords ignore each other's discovery messages and remote file requests.
 

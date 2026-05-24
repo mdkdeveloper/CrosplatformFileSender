@@ -2,6 +2,7 @@ package com.dimonoso.crosplatformfilesender
 
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
+import com.dimonoso.crosplatformfilesender.filesystem.LocalWhitelistRootPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -46,11 +47,39 @@ class FilePaneDragDropTest {
     }
 
     @Test
+    fun localWhitelistRootDoesNotCreateDragEntries() {
+        val whitelistRoot = FileEntry(
+            path = LocalWhitelistRootPath,
+            name = "Whitelist",
+            type = FileEntryType.Directory,
+        )
+
+        val dragged = filePaneDragEntries(
+            entries = testEntries() + whitelistRoot,
+            selectedRowIds = setOf(LocalWhitelistRootPath),
+            draggedRowId = LocalWhitelistRootPath,
+        )
+
+        assertTrue(dragged.isEmpty())
+    }
+
+    @Test
     fun uploadDropWithoutRemoteDestinationIsInvalid() {
         val decision = filePaneDropDecision(
             payload = FilePaneDragPayload(FilePaneSide.Local, listOf(testEntries()[0])),
             target = FilePaneSide.Remote,
             destinationDirectoryPath = null,
+        )
+
+        assertIs<FilePaneDropDecision.InvalidDestination>(decision)
+    }
+
+    @Test
+    fun dropToLocalWhitelistRootIsInvalid() {
+        val decision = filePaneDropDecision(
+            payload = FilePaneDragPayload(FilePaneSide.Remote, listOf(testEntries()[0])),
+            target = FilePaneSide.Local,
+            destinationDirectoryPath = LocalWhitelistRootPath,
         )
 
         assertIs<FilePaneDropDecision.InvalidDestination>(decision)

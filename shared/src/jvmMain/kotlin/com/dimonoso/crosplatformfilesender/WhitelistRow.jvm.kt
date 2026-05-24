@@ -17,11 +17,13 @@ import com.dimonoso.crosplatformfilesender.filesystem.WhitelistDeletePolicyOverr
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
 import crosplatformfilesender.shared.generated.resources.Res
 import crosplatformfilesender.shared.generated.resources.remove
+import crosplatformfilesender.shared.generated.resources.whitelist_path_unavailable
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal actual fun WhitelistRow(
     folder: WhitelistFolder,
+    pathAvailable: Boolean,
     canMoveFolderToTrash: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onDeletePolicyChange: (WhitelistDeletePolicyOverride) -> Unit,
@@ -47,10 +49,20 @@ internal actual fun WhitelistRow(
                 label = { whitelistDeletePolicyLabel(it) },
                 onSelected = onDeletePolicyChange,
             )
+            if (!pathAvailable) {
+                Text(
+                    text = stringResource(Res.string.whitelist_path_unavailable),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Switch(
             checked = folder.enabled,
             onCheckedChange = onEnabledChange,
+            enabled = folder.enabled || pathAvailable,
         )
         TextButton(onClick = onRemove) {
             Text(stringResource(Res.string.remove))

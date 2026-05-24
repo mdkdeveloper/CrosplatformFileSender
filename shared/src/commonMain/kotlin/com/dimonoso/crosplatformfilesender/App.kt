@@ -106,6 +106,7 @@ import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
 import com.dimonoso.crosplatformfilesender.filesystem.RemoteDeletePolicy
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistDeletePolicyOverride
 import com.dimonoso.crosplatformfilesender.filesystem.WhitelistFolder
+import com.dimonoso.crosplatformfilesender.filesystem.isLocalWhitelistRootPath
 import com.dimonoso.crosplatformfilesender.localization.AppLocaleEnvironment
 import com.dimonoso.crosplatformfilesender.platform.PlatformFamily
 import com.dimonoso.crosplatformfilesender.remote.RemoteFileCatalogError
@@ -177,6 +178,7 @@ import crosplatformfilesender.shared.generated.resources.language_ukrainian
 import crosplatformfilesender.shared.generated.resources.loading
 import crosplatformfilesender.shared.generated.resources.local_delete_message
 import crosplatformfilesender.shared.generated.resources.local_delete_title
+import crosplatformfilesender.shared.generated.resources.local_whitelist_root
 import crosplatformfilesender.shared.generated.resources.manual_peer
 import crosplatformfilesender.shared.generated.resources.max_incoming_transfers
 import crosplatformfilesender.shared.generated.resources.max_outgoing_transfers
@@ -581,7 +583,17 @@ private fun FileBrowserColumns(
     keyword: String,
 ) {
     var localReloadToken by remember { mutableStateOf(0) }
-    val localRoots = remember(services, localReloadToken) { services.fileSystem.localRoots() }
+    val whitelist by services.fileSystem.whitelist.collectAsState()
+    val localWhitelistRootName = stringResource(Res.string.local_whitelist_root)
+    val localRoots = remember(services, localReloadToken, whitelist, localWhitelistRootName) {
+        services.fileSystem.localRoots().map { entry ->
+            if (isLocalWhitelistRootPath(entry.path)) {
+                entry.copy(name = localWhitelistRootName)
+            } else {
+                entry
+            }
+        }
+    }
     var localPath by remember { mutableStateOf<String?>(null) }
     var localPathStack by remember { mutableStateOf<List<String?>>(emptyList()) }
     var localSelection by remember { mutableStateOf(FileBrowserSelection()) }
@@ -606,13 +618,30 @@ private fun FileBrowserColumns(
     val deleteProblemText = stringResource(Res.string.delete_problem)
     val shouldPromptStorageAccess = storageAccessState.requiresRuntimeApproval && !storageAccessState.isGranted
     val useAndroidFileSelection = services.platform.deviceInfo.family == PlatformFamily.Android
+    val localDisplayPath = if (localPath?.let(::isLocalWhitelistRootPath) == true) {
+        localWhitelistRootName
+    } else {
+        localPath
+    }
 
     val localEntries = remember(localPath, localReloadToken, localRoots) {
         localPath?.let(services.fileSystem::browseLocal) ?: localRoots
     }
     val remoteEntries = (remoteState as? RemotePaneState.Loaded)?.entries.orEmpty()
-    val selectedLocalEntries = localEntries.filter { it.path in localSelection.selectedRowIds }
+    val selectedLocalEntries = localEntries.filter {
+        it.path in localSelection.selectedRowIds && !isLocalWhitelistRootPath(it.path)
+    }
     val selectedRemoteEntries = remoteEntries.filter { it.path in remoteSelection.selectedRowIds }
+
+    LaunchedEffect(localPath, localRoots) {
+        if (localPath?.let(::isLocalWhitelistRootPath) == true &&
+            localRoots.none { entry -> isLocalWhitelistRootPath(entry.path) }
+        ) {
+            localPath = null
+            localPathStack = emptyList()
+            localSelection = FileBrowserSelection()
+        }
+    }
 
     LaunchedEffect(transferTasks, selectedDevice?.id, localPath, remotePath) {
         val refreshRequest = autoRefreshTracker.consume(
@@ -733,7 +762,7 @@ private fun FileBrowserColumns(
     val localPane: @Composable (Modifier) -> Unit = { modifier ->
         FileBrowserPane(
             title = stringResource(Res.string.my_files),
-            path = localPath,
+            path = localDisplayPath,
             entries = localEntries,
             emptyText = stringResource(Res.string.empty_or_limited_access),
             modifier = modifier,
@@ -2045,9 +2074,11 @@ private fun WhitelistSettings(
             EmptyState(stringResource(Res.string.whitelist_empty))
         } else {
             whitelist.forEach { folder ->
+                val pathAvailable = services.fileSystem.isWhitelistFolderPathAvailable(folder.id)
                 WhitelistRow(
                     folder = folder,
-                    canMoveFolderToTrash = services.platform.fileSystem.canMoveToTrash(folder.path),
+                    pathAvailable = pathAvailable,
+                    canMoveFolderToTrash = pathAvailable && services.platform.fileSystem.canMoveToTrash(folder.path),
                     onEnabledChange = { enabled -> services.fileSystem.setWhitelistEnabled(folder.id, enabled) },
                     onDeletePolicyChange = { deletePolicy ->
                         services.fileSystem.setWhitelistDeletePolicyOverride(folder.id, deletePolicy)
@@ -2227,6 +2258,7 @@ private fun fileEntryTypeLabel(type: FileEntryType): String =
 @Composable
 internal expect fun WhitelistRow(
     folder: WhitelistFolder,
+    pathAvailable: Boolean,
     canMoveFolderToTrash: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onDeletePolicyChange: (WhitelistDeletePolicyOverride) -> Unit,

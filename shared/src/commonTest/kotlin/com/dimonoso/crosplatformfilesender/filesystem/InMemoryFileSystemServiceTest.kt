@@ -11,6 +11,100 @@ import kotlin.test.assertTrue
 
 class InMemoryFileSystemServiceTest {
     @Test
+    fun localRootsDoNotIncludeWhitelistRootWhenWhitelistIsEmpty() {
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = listOf(FileEntry(path = "/", name = "/", type = FileEntryType.Drive)),
+                listings = emptyMap(),
+            ),
+        )
+
+        assertEquals(listOf("/"), service.localRoots().map { it.path })
+    }
+
+    @Test
+    fun localRootsIncludeWhitelistRootWhenWhitelistHasExistingPath() {
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = listOf(FileEntry(path = "/", name = "/", type = FileEntryType.Drive)),
+                listings = mapOf("/shared" to emptyList()),
+            ),
+        )
+
+        service.addWhitelistFolder(WhitelistFolder(id = "shared", displayName = "Shared", path = "/shared"))
+
+        assertEquals(listOf("/", LocalWhitelistRootPath), service.localRoots().map { it.path })
+    }
+
+    @Test
+    fun localWhitelistRootShowsEnabledAndDisabledExistingEntriesOnly() {
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = emptyList(),
+                listings = mapOf(
+                    "/enabled" to emptyList(),
+                    "/disabled" to emptyList(),
+                ),
+            ),
+            initialWhitelist = listOf(
+                WhitelistFolder(id = "enabled", displayName = "Enabled", path = "/enabled", enabled = true),
+                WhitelistFolder(id = "disabled", displayName = "Disabled", path = "/disabled", enabled = false),
+                WhitelistFolder(id = "missing", displayName = "Missing", path = "/missing", enabled = true),
+                WhitelistFolder(id = "blank", displayName = "Blank", path = "", enabled = true),
+            ),
+        )
+
+        val entries = service.browseLocal(LocalWhitelistRootPath)
+
+        assertEquals(listOf("/enabled", "/disabled"), entries.map { it.path })
+        assertEquals(listOf("Enabled", "Disabled"), entries.map { it.name })
+    }
+
+    @Test
+    fun initialMissingAndBlankWhitelistPathsAreDisabledAndPersisted() {
+        val persisted = mutableListOf<List<WhitelistFolder>>()
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = emptyList(),
+                listings = mapOf("/shared" to emptyList()),
+            ),
+            initialWhitelist = listOf(
+                WhitelistFolder(id = "shared", displayName = "Shared", path = "/shared", enabled = true),
+                WhitelistFolder(id = "missing", displayName = "Missing", path = "/missing", enabled = true),
+                WhitelistFolder(id = "blank", displayName = "Blank", path = "", enabled = true),
+            ),
+            onWhitelistChanged = { persisted += it },
+        )
+
+        assertEquals(listOf(true, false, false), service.whitelist.value.map { it.enabled })
+        assertEquals(listOf(service.whitelist.value), persisted)
+    }
+
+    @Test
+    fun missingAndBlankWhitelistPathsCannotBeEnabledUntilTheyExist() {
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = emptyList(),
+                listings = mapOf("/shared" to emptyList()),
+            ),
+            initialWhitelist = listOf(
+                WhitelistFolder(id = "shared", displayName = "Shared", path = "/shared", enabled = false),
+                WhitelistFolder(id = "missing", displayName = "Missing", path = "/missing", enabled = false),
+                WhitelistFolder(id = "blank", displayName = "Blank", path = "", enabled = false),
+            ),
+        )
+
+        service.setWhitelistEnabled("shared", enabled = true)
+        service.setWhitelistEnabled("missing", enabled = true)
+        service.setWhitelistEnabled("blank", enabled = true)
+
+        assertEquals(listOf(true, false, false), service.whitelist.value.map { it.enabled })
+        assertTrue(service.isWhitelistFolderPathAvailable("shared"))
+        assertFalse(service.isWhitelistFolderPathAvailable("missing"))
+        assertFalse(service.isWhitelistFolderPathAvailable("blank"))
+    }
+
+    @Test
     fun whitelistFiltersRemoteBrowseToEnabledFolders() {
         val service = InMemoryFileSystemService(
             FakePlatformFileSystem(
@@ -81,7 +175,19 @@ class InMemoryFileSystemServiceTest {
 
     @Test
     fun deletePolicyUsesNearestEnabledExplicitWhitelistOverride() {
-        val service = InMemoryFileSystemService(FakePlatformFileSystem(emptyList(), emptyMap()))
+        val service = InMemoryFileSystemService(
+            FakePlatformFileSystem(
+                roots = emptyList(),
+                listings = mapOf(
+                    "/shared" to listOf(
+                        FileEntry(path = "/shared/projects", name = "projects", type = FileEntryType.Directory),
+                    ),
+                    "/shared/projects" to listOf(
+                        FileEntry(path = "/shared/projects/a.txt", name = "a.txt", type = FileEntryType.File),
+                    ),
+                ),
+            ),
+        )
         service.addWhitelistFolder(
             WhitelistFolder(
                 id = "outer",

@@ -196,6 +196,13 @@ class DefaultRemoteFileCatalogServiceTest {
                         )
                         else -> emptyList()
                     }
+
+                override fun metadata(path: String): FileEntry? =
+                    when (path) {
+                        "/shared" -> FileEntry(path = "/shared", name = "Shared", type = FileEntryType.Directory)
+                        "/shared/a.txt" -> FileEntry(path = "/shared/a.txt", name = "a.txt", type = FileEntryType.File)
+                        else -> null
+                    }
             },
         )
         service.addWhitelistFolder(

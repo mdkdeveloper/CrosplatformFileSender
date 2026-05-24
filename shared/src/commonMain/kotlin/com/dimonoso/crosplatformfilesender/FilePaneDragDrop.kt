@@ -4,6 +4,7 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
+import com.dimonoso.crosplatformfilesender.filesystem.isLocalWhitelistRootPath
 import com.dimonoso.crosplatformfilesender.platform.PlatformFileSystem
 import com.dimonoso.crosplatformfilesender.transfer.TransferItem
 
@@ -45,10 +46,11 @@ internal fun filePaneDragEntries(
     selectedRowIds: Set<String>,
     draggedRowId: String,
 ): List<FileEntry> {
-    val draggedEntry = entries.firstOrNull { entry -> entry.path == draggedRowId } ?: return emptyList()
+    val draggableEntries = entries.filterNot { entry -> isLocalWhitelistRootPath(entry.path) }
+    val draggedEntry = draggableEntries.firstOrNull { entry -> entry.path == draggedRowId } ?: return emptyList()
     if (draggedEntry.path !in selectedRowIds) return listOf(draggedEntry)
 
-    return entries.filter { entry -> entry.path in selectedRowIds }
+    return draggableEntries.filter { entry -> entry.path in selectedRowIds }
 }
 
 internal fun FilePaneDragPayload.canDropOn(target: FilePaneSide): Boolean =
@@ -63,6 +65,8 @@ internal fun filePaneDropDecision(
 
     val destination = destinationDirectoryPath?.takeIf { path -> path.isNotBlank() }
         ?: return FilePaneDropDecision.InvalidDestination
+    if (isLocalWhitelistRootPath(destination)) return FilePaneDropDecision.InvalidDestination
+
     val items = payload.entries.map(FileEntry::toTransferItem)
 
     return when (payload.source to target) {

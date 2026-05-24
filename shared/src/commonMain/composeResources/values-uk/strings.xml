@@ -16,6 +16,7 @@
     <string name="no_found_devices">Немає знайдених пристроїв</string>
     <string name="my_files">Мої файли</string>
     <string name="to_roots">До коренів</string>
+    <string name="local_whitelist_root">Whitelist</string>
     <string name="empty_or_limited_access">Порожньо або доступ обмежено</string>
     <string name="android_storage_access_message">Для повного перегляду локального сховища надайте Android доступ до всіх файлів.</string>
     <string name="android_storage_access_button">Надати доступ</string>
@@ -54,6 +55,7 @@
     <string name="whitelist_folders">Whitelist папок</string>
     <string name="add_folder">Додати папку</string>
     <string name="whitelist_empty">Whitelist порожній</string>
+    <string name="whitelist_path_unavailable">Шлях недоступний</string>
     <string name="transfer_queue">Черга передач</string>
     <string name="queue_empty">Черга порожня</string>
     <string name="close">Закрити</string>

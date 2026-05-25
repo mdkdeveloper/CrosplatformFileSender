@@ -95,20 +95,25 @@ The repository also includes helper scripts that build release artifacts and ope
 ```bash
 ./build-android.sh 1.0.0
 ./build-linux.sh 1.0.0
+bash ./build-linux-portable.sh 1.0.0
 ./build-macos.sh 1.0.0
 ```
 
 ```powershell
 .\build-android.bat 1.0.0
 .\build-windows.bat 1.0.0
+.\build-windows-portable.bat 1.0.0
 .\build-linux-wsl.bat 1.0.0
+.\build-linux-portable-wsl.bat 1.0.0
 ```
 
 Useful output locations:
 
 - Android APK: `androidApp/build/outputs/apk/release/`
 - Windows MSI: `desktopApp/build/compose/binaries/main-release/msi/`
+- Windows portable zip: `desktopApp/build/compose/binaries/main-release/zip/`
 - Linux DEB: `desktopApp/build/compose/binaries/main-release/deb/`
+- Linux portable tar.gz: `desktopApp/build/compose/binaries/main-release/tar/`
 - macOS DMG: `desktopApp/build/compose/binaries/main-release/dmg/`
 
 macOS DMG builds must be run on macOS with a full JDK that includes `jpackage` and `jlink`.

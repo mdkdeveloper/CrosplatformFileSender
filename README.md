@@ -1,6 +1,6 @@
-# Crossplatform File Sender
+# Local File Sender
 
-Crossplatform File Sender is a Kotlin Multiplatform app for moving files between Android and desktop devices on the same local network. It uses LAN discovery, a shared keyword, and a simple file browser so you can send or download selected files without a cloud service.
+Local File Sender is a Kotlin Multiplatform app for moving files between Android and desktop devices on the same local network. It uses LAN discovery, a shared keyword, and a simple file browser so you can send or download selected files without a cloud service.
 
 ## Supported platforms
 
@@ -58,22 +58,22 @@ On Windows PowerShell:
 .\gradlew.bat :desktopApp:run
 ```
 
-### Build the Android debug APK
+### Build the Android release APK
 
 ```bash
-./gradlew :androidApp:assembleDebug
+./gradlew -PappVersion=1.0.0 :androidApp:assembleRelease
 ```
 
 On Windows PowerShell:
 
 ```powershell
-.\gradlew.bat :androidApp:assembleDebug
+.\gradlew.bat "-PappVersion=1.0.0" :androidApp:assembleRelease
 ```
 
-The debug APK is written under:
+The release APK is written under:
 
 ```text
-androidApp/build/outputs/apk/debug/
+androidApp/build/outputs/apk/release/
 ```
 
 ### Run shared JVM tests
@@ -90,26 +90,26 @@ On Windows PowerShell:
 
 ### Package helpers
 
-The repository also includes helper scripts that build platform artifacts and open the output folder when possible.
+The repository also includes helper scripts that build release artifacts and open the output folder when possible. The first argument is the app version; when omitted, it defaults to `1.0.0`.
 
 ```bash
-./build-android.sh
-./build-linux.sh
-./build-macos.sh
+./build-android.sh 1.0.0
+./build-linux.sh 1.0.0
+./build-macos.sh 1.0.0
 ```
 
 ```powershell
-.\build-android.bat
-.\build-windows.bat
-.\build-linux-wsl.bat
+.\build-android.bat 1.0.0
+.\build-windows.bat 1.0.0
+.\build-linux-wsl.bat 1.0.0
 ```
 
 Useful output locations:
 
-- Android APK: `androidApp/build/outputs/apk/debug/`
-- Windows MSI: `desktopApp/build/compose/binaries/main/msi/`
-- Linux DEB: `desktopApp/build/compose/binaries/main/deb/`
-- macOS DMG: `desktopApp/build/compose/binaries/main/dmg/`
+- Android APK: `androidApp/build/outputs/apk/release/`
+- Windows MSI: `desktopApp/build/compose/binaries/main-release/msi/`
+- Linux DEB: `desktopApp/build/compose/binaries/main-release/deb/`
+- macOS DMG: `desktopApp/build/compose/binaries/main-release/dmg/`
 
 macOS DMG builds must be run on macOS with a full JDK that includes `jpackage` and `jlink`.
 On macOS, check Java with `java -version` and list installed JDKs with `/usr/libexec/java_home -V`.
@@ -124,7 +124,7 @@ On macOS, check Java with `java -version` and list installed JDKs with `/usr/lib
 6. Browse local files and remote files. On Android, tap folders to open them and use checkboxes inside opened folders to select files or folders.
 7. Open a destination folder in the receiving file pane. The root view is not a transfer destination.
 8. Use Send selected or Download selected, or drag files and folders between the local and remote panes.
-9. On Android, share files from another app to Crossplatform File Sender, then select the receiving device and open a remote destination folder before tapping Send shared files. Cancel clears the pending shared files.
+9. On Android, share files from another app to Local File Sender, then select the receiving device and open a remote destination folder before tapping Send shared files. Cancel clears the pending shared files.
 10. In the desktop app, you can also drop files and folders from the system file manager into the remote pane to send them.
 11. On desktop, edit a pane's path field and press Enter, or click elsewhere, to navigate to that path. On Android, tap the displayed path to copy it.
 12. Select file-browser items and press `Delete` to request deletion from the active pane.

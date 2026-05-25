@@ -1,12 +1,25 @@
-param(
-    [switch]$NoOpen
-)
-
 $ErrorActionPreference = "Stop"
+
+$AppVersion = "1.0.0"
+$VersionProvided = $false
+$NoOpen = $false
+
+foreach ($Argument in $args) {
+    if ($Argument -eq "--no-open" -or $Argument -eq "-NoOpen") {
+        $NoOpen = $true
+    }
+    elseif (-not $VersionProvided -and -not $Argument.StartsWith("-")) {
+        $AppVersion = $Argument
+        $VersionProvided = $true
+    }
+    else {
+        throw "Unknown argument: $Argument. Usage: build-windows.bat [version] [--no-open]"
+    }
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $GradleWrapper = Join-Path $RepoRoot "gradlew.bat"
-$OutputDir = Join-Path $RepoRoot "desktopApp\build\compose\binaries\main\msi"
+$OutputDir = Join-Path $RepoRoot "desktopApp\build\compose\binaries\main-release\msi"
 
 function Test-JPackageHome {
     param([string]$Path)
@@ -45,11 +58,11 @@ function Resolve-JPackageHome {
 
 $env:JAVA_HOME = Resolve-JPackageHome
 Write-Host "Using JAVA_HOME: $env:JAVA_HOME"
-Write-Host "Building Windows MSI..."
+Write-Host "Building Windows release MSI version $AppVersion..."
 
 Push-Location $RepoRoot
 try {
-    & $GradleWrapper ":desktopApp:packageMsi"
+    & $GradleWrapper "-PappVersion=$AppVersion" ":desktopApp:packageReleaseMsi"
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

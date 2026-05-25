@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+app_version="1.0.0"
+version_provided=0
 open_output_dir=1
-if [[ "${1:-}" == "--no-open" ]]; then
-    open_output_dir=0
-fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-open)
+            open_output_dir=0
+            ;;
+        -*)
+            echo "Unknown argument: $arg. Usage: build-linux.sh [version] [--no-open]" >&2
+            exit 1
+            ;;
+        *)
+            if [[ "$version_provided" -eq 0 ]]; then
+                app_version="$arg"
+                version_provided=1
+            else
+                echo "Unknown argument: $arg. Usage: build-linux.sh [version] [--no-open]" >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
-output_dir="$repo_root/desktopApp/build/compose/binaries/main/deb"
+output_dir="$repo_root/desktopApp/build/compose/binaries/main-release/deb"
 
 if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/jpackage" && -x "$JAVA_HOME/bin/jlink" ]]; then
     :
@@ -22,12 +42,12 @@ else
 fi
 
 echo "Using JAVA_HOME: $JAVA_HOME"
-echo "Building Linux DEB..."
+echo "Building Linux release DEB version $app_version..."
 
 if [[ -x "$repo_root/gradlew" ]]; then
-    "$repo_root/gradlew" :desktopApp:packageDeb
+    "$repo_root/gradlew" "-PappVersion=$app_version" :desktopApp:packageReleaseDeb
 else
-    bash "$repo_root/gradlew" :desktopApp:packageDeb
+    bash "$repo_root/gradlew" "-PappVersion=$app_version" :desktopApp:packageReleaseDeb
 fi
 
 artifact="$(find "$output_dir" -maxdepth 1 -type f -name "*.deb" -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -n 1 | cut -d " " -f 2-)"

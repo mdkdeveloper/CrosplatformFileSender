@@ -1,12 +1,25 @@
-param(
-    [switch]$NoOpen
-)
-
 $ErrorActionPreference = "Stop"
+
+$AppVersion = "1.0.0"
+$VersionProvided = $false
+$NoOpen = $false
+
+foreach ($Argument in $args) {
+    if ($Argument -eq "--no-open" -or $Argument -eq "-NoOpen") {
+        $NoOpen = $true
+    }
+    elseif (-not $VersionProvided -and -not $Argument.StartsWith("-")) {
+        $AppVersion = $Argument
+        $VersionProvided = $true
+    }
+    else {
+        throw "Unknown argument: $Argument. Usage: build-android.bat [version] [--no-open]"
+    }
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $GradleWrapper = Join-Path $RepoRoot "gradlew.bat"
-$OutputDir = Join-Path $RepoRoot "androidApp\build\outputs\apk\debug"
+$OutputDir = Join-Path $RepoRoot "androidApp\build\outputs\apk\release"
 
 function Test-JavaHome {
     param([string]$Path)
@@ -45,11 +58,11 @@ function Resolve-JavaHome {
 
 $env:JAVA_HOME = Resolve-JavaHome
 Write-Host "Using JAVA_HOME: $env:JAVA_HOME"
-Write-Host "Building Android debug APK..."
+Write-Host "Building Android release APK version $AppVersion..."
 
 Push-Location $RepoRoot
 try {
-    & $GradleWrapper ":androidApp:assembleDebug"
+    & $GradleWrapper "-PappVersion=$AppVersion" ":androidApp:assembleRelease"
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

@@ -11,7 +11,7 @@ fun main() = application {
         icon = painterResource("icons/app-icon.png"),
         onCloseRequest = ::exitApplication,
         state = rememberWindowState(width = 1180.dp, height = 760.dp),
-        title = "CrosplatformFileSender",
+        title = "Local File Sender",
     ) {
         App()
     }

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_title">Crossplatform File Sender</string>
+    <string name="app_title">Local File Sender</string>
     <string name="workspace_tab">Files</string>
     <string name="settings_tab">Settings</string>
     <string name="full_filesystem">Full filesystem</string>

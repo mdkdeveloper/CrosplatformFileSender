@@ -1,11 +1,24 @@
-param(
-    [switch]$NoOpen
-)
-
 $ErrorActionPreference = "Stop"
 
+$AppVersion = "1.0.0"
+$VersionProvided = $false
+$NoOpen = $false
+
+foreach ($Argument in $args) {
+    if ($Argument -eq "--no-open" -or $Argument -eq "-NoOpen") {
+        $NoOpen = $true
+    }
+    elseif (-not $VersionProvided -and -not $Argument.StartsWith("-")) {
+        $AppVersion = $Argument
+        $VersionProvided = $true
+    }
+    else {
+        throw "Unknown argument: $Argument. Usage: build-linux-wsl.bat [version] [--no-open]"
+    }
+}
+
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$OutputDir = Join-Path $RepoRoot "desktopApp\build\compose\binaries\main\deb"
+$OutputDir = Join-Path $RepoRoot "desktopApp\build\compose\binaries\main-release\deb"
 
 if ($null -eq (Get-Command "wsl.exe" -ErrorAction SilentlyContinue)) {
     throw "WSL is required to build the Linux package from Windows. Install WSL with a Linux distro, then run this script again."
@@ -41,10 +54,10 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslRoot)) {
     throw "Could not convert the repository path to a WSL path. Windows path: $RepoRoot. WSL input path: $wslInputPath. Details: $wslPathDetails"
 }
 
-$openArg = if ($NoOpen) { "--no-open" } else { "--no-open" }
-$command = "cd $(ConvertTo-BashSingleQuoted $wslRoot) && bash scripts/package-linux.sh $openArg"
+$openArg = if ($NoOpen) { " --no-open" } else { "" }
+$command = "cd $(ConvertTo-BashSingleQuoted $wslRoot) && bash scripts/package-linux.sh $(ConvertTo-BashSingleQuoted $AppVersion)$openArg"
 
-Write-Host "Building Linux DEB through WSL..."
+Write-Host "Building Linux release DEB version $AppVersion through WSL..."
 & wsl.exe bash -lc $command
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE

@@ -6,7 +6,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.platform.PlatformFileSystem
 
-private const val FilePaneDragTokenLabel = "Crossplatform File Sender file pane transfer"
+private const val FilePaneDragTokenLabel = "Local File Sender file pane transfer"
 private const val FilePaneDragToken = "crosplatform-file-pane-transfer"
 
 internal actual fun createFilePaneDragTransferData(): DragAndDropTransferData =

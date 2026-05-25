@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_title">Crossplatform File Sender</string>
+    <string name="app_title">Local File Sender</string>
     <string name="workspace_tab">Файли</string>
     <string name="settings_tab">Налаштування</string>
     <string name="full_filesystem">Повна файлова система</string>

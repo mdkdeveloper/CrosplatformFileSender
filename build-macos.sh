@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+app_version="1.0.0"
+version_provided=0
 open_output_dir=1
-if [[ "${1:-}" == "--no-open" ]]; then
-    open_output_dir=0
-fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-open)
+            open_output_dir=0
+            ;;
+        -*)
+            echo "Unknown argument: $arg. Usage: build-macos.sh [version] [--no-open]" >&2
+            exit 1
+            ;;
+        *)
+            if [[ "$version_provided" -eq 0 ]]; then
+                app_version="$arg"
+                version_provided=1
+            else
+                echo "Unknown argument: $arg. Usage: build-macos.sh [version] [--no-open]" >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
     echo "macOS app packaging must be run on macOS." >&2
@@ -13,7 +33,7 @@ fi
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$script_dir"
-output_dir="$repo_root/desktopApp/build/compose/binaries/main/app"
+output_dir="$repo_root/desktopApp/build/compose/binaries/main-release/dmg"
 
 if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/jpackage" && -x "$JAVA_HOME/bin/jlink" ]]; then
     :
@@ -31,19 +51,19 @@ else
 fi
 
 echo "Using JAVA_HOME: $JAVA_HOME"
-echo "Building macOS app..."
-echo "Running: ./gradlew :desktopApp:createDistributable --console=plain --info --stacktrace --no-daemon"
+echo "Building macOS release DMG version $app_version..."
+echo "Running: ./gradlew -PappVersion=$app_version :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon"
 
 if [[ -x "$repo_root/gradlew" ]]; then
-    "$repo_root/gradlew" :desktopApp:createDistributable --console=plain --info --stacktrace --no-daemon
+    "$repo_root/gradlew" "-PappVersion=$app_version" :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon
 else
-    bash "$repo_root/gradlew" :desktopApp:createDistributable --console=plain --info --stacktrace --no-daemon
+    bash "$repo_root/gradlew" "-PappVersion=$app_version" :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon
 fi
 
 artifact=""
 latest_mtime=0
 shopt -s nullglob
-for candidate in "$output_dir"/*.app; do
+for candidate in "$output_dir"/*.dmg; do
     candidate_mtime="$(stat -f "%m" "$candidate")"
     if (( candidate_mtime > latest_mtime )); then
         artifact="$candidate"
@@ -53,11 +73,11 @@ done
 shopt -u nullglob
 
 if [[ -z "$artifact" ]]; then
-    echo "App was not found in $output_dir" >&2
+    echo "DMG was not found in $output_dir" >&2
     exit 1
 fi
 
-echo "macOS app:"
+echo "macOS package:"
 echo "$artifact"
 
 if [[ "$open_output_dir" -eq 1 ]]; then

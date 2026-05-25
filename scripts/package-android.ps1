@@ -72,6 +72,7 @@ finally {
 }
 
 $artifact = Get-ChildItem -Path $OutputDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notmatch "unsigned" } |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 

@@ -61,7 +61,7 @@ echo "Building Android release APK version $app_version..."
 
 run_gradle "-PappVersion=$app_version" :androidApp:assembleRelease
 
-artifact="$(find "$output_dir" -maxdepth 1 -type f -name "*.apk" -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -n 1 | cut -d " " -f 2-)"
+artifact="$(find "$output_dir" -maxdepth 1 -type f -name "*.apk" ! -name "*unsigned*" -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -n 1 | cut -d " " -f 2-)"
 if [[ -z "$artifact" ]]; then
     echo "APK was not found in $output_dir" >&2
     exit 1

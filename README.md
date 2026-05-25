@@ -76,6 +76,8 @@ The release APK is written under:
 androidApp/build/outputs/apk/release/
 ```
 
+The helper release APK is signed with the local debug key so it can be installed directly on a device. Use a production signing config for store or public distribution builds.
+
 ### Run shared JVM tests
 
 ```bash

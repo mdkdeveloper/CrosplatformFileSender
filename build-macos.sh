@@ -35,6 +35,21 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$script_dir"
 output_dir="$repo_root/desktopApp/build/compose/binaries/main-release/dmg"
 
+run_gradle() {
+    local wrapper_dir="$repo_root/build/tmp/shell-gradle-wrapper"
+    local wrapper="$wrapper_dir/gradlew"
+
+    mkdir -p "$wrapper_dir"
+    tr -d '\r' < "$repo_root/gradlew" > "$wrapper"
+    chmod +x "$wrapper"
+
+    if [[ ! -e "$wrapper_dir/gradle" ]]; then
+        ln -s "$repo_root/gradle" "$wrapper_dir/gradle" 2>/dev/null || cp -R "$repo_root/gradle" "$wrapper_dir/gradle"
+    fi
+
+    "$wrapper" "$@"
+}
+
 if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/jpackage" && -x "$JAVA_HOME/bin/jlink" ]]; then
     :
 elif java_home_candidate="$(/usr/libexec/java_home 2>/dev/null)" \
@@ -54,11 +69,7 @@ echo "Using JAVA_HOME: $JAVA_HOME"
 echo "Building macOS release DMG version $app_version..."
 echo "Running: ./gradlew -PappVersion=$app_version :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon"
 
-if [[ -x "$repo_root/gradlew" ]]; then
-    "$repo_root/gradlew" "-PappVersion=$app_version" :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon
-else
-    bash "$repo_root/gradlew" "-PappVersion=$app_version" :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon
-fi
+run_gradle "-PappVersion=$app_version" :desktopApp:packageReleaseDmg --console=plain --info --stacktrace --no-daemon
 
 artifact=""
 latest_mtime=0

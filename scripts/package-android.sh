@@ -30,6 +30,21 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 output_dir="$repo_root/androidApp/build/outputs/apk/release"
 
+run_gradle() {
+    local wrapper_dir="$repo_root/build/tmp/wsl-gradle-wrapper"
+    local wrapper="$wrapper_dir/gradlew"
+
+    mkdir -p "$wrapper_dir"
+    tr -d '\r' < "$repo_root/gradlew" > "$wrapper"
+    chmod +x "$wrapper"
+
+    if [[ ! -e "$wrapper_dir/gradle" ]]; then
+        ln -s "$repo_root/gradle" "$wrapper_dir/gradle" 2>/dev/null || cp -R "$repo_root/gradle" "$wrapper_dir/gradle"
+    fi
+
+    "$wrapper" "$@"
+}
+
 if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
     :
 elif command -v java >/dev/null 2>&1; then
@@ -44,11 +59,7 @@ fi
 echo "Using JAVA_HOME: $JAVA_HOME"
 echo "Building Android release APK version $app_version..."
 
-if [[ -x "$repo_root/gradlew" ]]; then
-    "$repo_root/gradlew" "-PappVersion=$app_version" :androidApp:assembleRelease
-else
-    bash "$repo_root/gradlew" "-PappVersion=$app_version" :androidApp:assembleRelease
-fi
+run_gradle "-PappVersion=$app_version" :androidApp:assembleRelease
 
 artifact="$(find "$output_dir" -maxdepth 1 -type f -name "*.apk" -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -n 1 | cut -d " " -f 2-)"
 if [[ -z "$artifact" ]]; then

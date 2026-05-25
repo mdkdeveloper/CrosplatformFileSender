@@ -15,6 +15,7 @@ Crossplatform File Sender is a Kotlin Multiplatform app for moving files between
 - Pair devices by using the same discovery keyword.
 - Browse local files and the remote device's shared folders.
 - On Android, browse internal shared storage plus mounted SD cards and USB storage from the local file pane when all-files access is granted.
+- On Android, receive one or more files from another app's Share action and keep them pending until a destination device and folder are selected.
 - Send selected files and folders to another device.
 - Download selected files and folders from another device.
 - On Android, select files and folders with checkboxes inside opened folders; root folders are opened by tapping and are not selectable.
@@ -123,10 +124,11 @@ On macOS, check Java with `java -version` and list installed JDKs with `/usr/lib
 6. Browse local files and remote files. On Android, tap folders to open them and use checkboxes inside opened folders to select files or folders.
 7. Open a destination folder in the receiving file pane. The root view is not a transfer destination.
 8. Use Send selected or Download selected, or drag files and folders between the local and remote panes.
-9. In the desktop app, you can also drop files and folders from the system file manager into the remote pane to send them.
-10. On desktop, edit a pane's path field and press Enter, or click elsewhere, to navigate to that path. On Android, tap the displayed path to copy it.
-11. Select file-browser items and press `Delete` to request deletion from the active pane.
-12. Open the transfer queue to pause, resume, cancel, or check progress.
+9. On Android, share files from another app to Crossplatform File Sender, then select the receiving device and open a remote destination folder before tapping Send shared files. Cancel clears the pending shared files.
+10. In the desktop app, you can also drop files and folders from the system file manager into the remote pane to send them.
+11. On desktop, edit a pane's path field and press Enter, or click elsewhere, to navigate to that path. On Android, tap the displayed path to copy it.
+12. Select file-browser items and press `Delete` to request deletion from the active pane.
+13. Open the transfer queue to pause, resume, cancel, or check progress.
 
 ## Sharing and safety notes
 

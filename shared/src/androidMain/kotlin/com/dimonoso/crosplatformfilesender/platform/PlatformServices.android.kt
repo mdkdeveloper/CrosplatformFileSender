@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.provider.Settings
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntry
 import com.dimonoso.crosplatformfilesender.filesystem.FileEntryType
@@ -62,6 +63,7 @@ private class AndroidPlatformFileSystem(
 
     override fun list(path: String): List<FileEntry> {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.list(path)
+        if (!path.isDocumentContentPath()) return emptyList()
         val resolver = context?.contentResolver ?: return emptyList()
         val parentUri = resolveDocumentUri(path) ?: return emptyList()
         val parentDocumentId = DocumentsContract.getDocumentId(parentUri)
@@ -107,6 +109,7 @@ private class AndroidPlatformFileSystem(
             return list(synthetic.parentPath).firstOrNull { it.name == synthetic.childName }
         }
         if (!path.isContentPath()) return JvmLikeAndroidFiles.metadata(path)
+        if (!path.isDocumentContentPath()) return genericContentMetadata(path)
         val resolver = context?.contentResolver ?: return null
         val uri = resolveDocumentUri(path) ?: return null
         val projection = arrayOf(
@@ -135,6 +138,7 @@ private class AndroidPlatformFileSystem(
 
     override fun createDirectories(path: String): Boolean {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.createDirectories(path)
+        if (!path.isDocumentContentPath()) return exists(path)
         val synthetic = path.syntheticChild() ?: return exists(path)
         if (exists(path)) return true
         val resolver = context?.contentResolver ?: return false
@@ -151,12 +155,14 @@ private class AndroidPlatformFileSystem(
 
     override fun childPath(parentPath: String, childName: String): String {
         if (!parentPath.isContentPath()) return JvmLikeAndroidFiles.childPath(parentPath, childName)
+        if (!parentPath.isDocumentContentPath()) return parentPath
         return list(parentPath).firstOrNull { it.name == childName }?.path
             ?: "$parentPath$SyntheticChildMarker${Uri.encode(childName)}"
     }
 
     override fun parentPath(path: String): String? {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.parentPath(path)
+        if (!path.isDocumentContentPath()) return null
         return path.syntheticChild()?.parentPath
     }
 
@@ -177,12 +183,14 @@ private class AndroidPlatformFileSystem(
 
     override fun openWrite(path: String): PlatformWriteStream {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.openWrite(path)
+        if (!path.isDocumentContentPath()) error("Generic content URI targets are read-only: $path")
         val resolver = context?.contentResolver ?: error("Android context is not bound.")
         val uri = ensureWritableDocumentUri(path) ?: error("Cannot create document: $path")
         return AndroidWriteStream(resolver.openOutputStream(uri, "wt") ?: error("Cannot open document for write: $path"))
     }
 
     override fun move(sourcePath: String, targetPath: String, replace: Boolean): Boolean {
+        if (sourcePath.isGenericContentPath() || targetPath.isGenericContentPath()) return false
         if (!sourcePath.isContentPath() && !targetPath.isContentPath()) {
             return JvmLikeAndroidFiles.move(sourcePath, targetPath, replace)
         }
@@ -201,6 +209,7 @@ private class AndroidPlatformFileSystem(
 
     override fun canMoveToTrash(path: String): Boolean {
         if (!path.isContentPath()) return false
+        if (!path.isDocumentContentPath()) return false
         val flags = documentFlags(path) ?: return false
         return flags and SupportsTrashFlag != 0L && hasTrashDocumentMethod()
     }
@@ -218,6 +227,7 @@ private class AndroidPlatformFileSystem(
 
     override fun delete(path: String, recursive: Boolean): Boolean {
         if (!path.isContentPath()) return JvmLikeAndroidFiles.delete(path, recursive)
+        if (!path.isDocumentContentPath()) return false
         val resolver = context?.contentResolver ?: return false
         val entry = metadata(path) ?: return true
         if (recursive && entry.type == FileEntryType.Directory) {
@@ -245,6 +255,7 @@ private class AndroidPlatformFileSystem(
     }
 
     private fun resolveExistingUri(path: String): Uri? {
+        if (path.isGenericContentPath()) return Uri.parse(path)
         path.syntheticChild()?.let { child ->
             return list(child.parentPath).firstOrNull { it.name == child.childName }?.path?.let(Uri::parse)
         }
@@ -252,6 +263,7 @@ private class AndroidPlatformFileSystem(
     }
 
     private fun ensureWritableDocumentUri(path: String): Uri? {
+        if (path.isGenericContentPath()) return null
         path.syntheticChild()?.let { child ->
             val existing = resolveExistingUri(path)
             if (existing != null) return existing
@@ -293,6 +305,50 @@ private class AndroidPlatformFileSystem(
                 Uri::class.java,
             )
         }.isSuccess
+
+    private fun genericContentMetadata(path: String): FileEntry? {
+        val resolver = context?.contentResolver ?: return null
+        val uri = Uri.parse(path)
+        var displayName: String? = null
+        var sizeBytes: Long? = null
+        runCatching {
+            resolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    displayName = cursor.stringOrNull(OpenableColumns.DISPLAY_NAME)
+                    sizeBytes = cursor.longOrNull(OpenableColumns.SIZE)
+                }
+            }
+        }
+
+        val fallbackName = uri.lastPathSegment
+            ?.substringAfterLast('/')
+            ?.takeIf { it.isNotBlank() }
+            ?: uri.toString()
+
+        return FileEntry(
+            path = uri.toString(),
+            name = displayName?.takeIf { it.isNotBlank() } ?: fallbackName,
+            type = FileEntryType.File,
+            sizeBytes = sizeBytes,
+            isBrowseable = false,
+        )
+    }
+
+    private fun String.isDocumentContentPath(): Boolean {
+        if (!isContentPath()) return false
+        val uri = Uri.parse(this)
+        return "/tree/" in uri.encodedPath.orEmpty() ||
+            context?.let { DocumentsContract.isDocumentUri(it, uri) } == true
+    }
+
+    private fun String.isGenericContentPath(): Boolean =
+        isContentPath() && !isDocumentContentPath()
 }
 
 private const val SyntheticChildMarker = "#cfs-child="
@@ -313,6 +369,16 @@ private fun String.syntheticChild(): SyntheticChild? {
 }
 
 private fun String.isContentPath(): Boolean = startsWith("content://")
+
+private fun android.database.Cursor.stringOrNull(columnName: String): String? {
+    val index = getColumnIndex(columnName)
+    return if (index >= 0 && !isNull(index)) getString(index) else null
+}
+
+private fun android.database.Cursor.longOrNull(columnName: String): Long? {
+    val index = getColumnIndex(columnName)
+    return if (index >= 0 && !isNull(index)) getLong(index) else null
+}
 
 private object JvmLikeAndroidFiles {
     fun list(path: String): List<FileEntry> =

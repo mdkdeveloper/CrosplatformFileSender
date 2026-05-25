@@ -28,6 +28,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             App()
         }
+        handleAndroidShareIntent(this, intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAndroidShareIntent(this, intent)
     }
 
     @Deprecated("Deprecated in Java")

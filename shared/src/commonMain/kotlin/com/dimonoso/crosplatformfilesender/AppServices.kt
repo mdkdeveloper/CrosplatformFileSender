@@ -31,6 +31,7 @@ data class AppServices(
     val transferQueue: TransferQueueService,
     val archive: ArchiveService,
     val backups: BackupService,
+    val pendingShare: PendingShareService,
 )
 
 fun createAppServices(): AppServices {
@@ -87,5 +88,6 @@ fun createAppServices(): AppServices {
         ),
         archive = archive,
         backups = backups,
+        pendingShare = createPendingShareService(),
     )
 }

@@ -194,6 +194,11 @@ import crosplatformfilesender.shared.generated.resources.no_found_devices
 import crosplatformfilesender.shared.generated.resources.no_remote_files_available
 import crosplatformfilesender.shared.generated.resources.open
 import crosplatformfilesender.shared.generated.resources.pause
+import crosplatformfilesender.shared.generated.resources.pending_share_count
+import crosplatformfilesender.shared.generated.resources.pending_share_more
+import crosplatformfilesender.shared.generated.resources.pending_share_ready
+import crosplatformfilesender.shared.generated.resources.pending_share_send
+import crosplatformfilesender.shared.generated.resources.pending_share_title
 import crosplatformfilesender.shared.generated.resources.queue
 import crosplatformfilesender.shared.generated.resources.queue_empty
 import crosplatformfilesender.shared.generated.resources.queue_progress
@@ -619,6 +624,7 @@ private fun FileBrowserColumns(
     var localAutoRefreshRequest by remember { mutableStateOf(0) }
     var remoteAutoRefreshRequest by remember(selectedDevice?.id) { mutableStateOf(0) }
     val transferTasks by services.transferQueue.tasks.collectAsState()
+    val pendingSharedFiles by services.pendingShare.files.collectAsState()
     val storageAccessState by services.platform.storageAccess.state.collectAsState()
     val autoRefreshTracker = remember(services.transferQueue) { TransferPaneAutoRefreshTracker() }
     val coroutineScope = rememberCoroutineScope()
@@ -808,6 +814,22 @@ private fun FileBrowserColumns(
         }
     }
 
+    fun sendPendingSharedFiles() {
+        val device = selectedDevice
+        val destination = remotePath
+        if (device == null || destination.isNullOrBlank()) {
+            transferError = invalidDestinationText
+            return
+        }
+
+        services.transferQueue.enqueueUpload(
+            items = pendingSharedFiles.map(FileEntry::toTransferItem),
+            target = device.toTransferEndpoint(),
+            destinationDirectoryPath = destination,
+        )
+        services.pendingShare.clearFiles()
+    }
+
     LaunchedEffect(selectedDevice?.id, remotePath, remoteReloadToken, keyword) {
         if (selectedDevice == null) {
             remoteState = RemotePaneState.Idle
@@ -982,6 +1004,14 @@ private fun FileBrowserColumns(
     ) {
         transferError?.let { ErrorState(it) }
         deleteError?.let { ErrorState(it) }
+        if (pendingSharedFiles.isNotEmpty()) {
+            PendingSharePanel(
+                files = pendingSharedFiles,
+                canSend = selectedDevice != null && !remotePath.isNullOrBlank(),
+                onSend = ::sendPendingSharedFiles,
+                onCancel = services.pendingShare::clearFiles,
+            )
+        }
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             if (maxWidth < 760.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1086,6 +1116,66 @@ private fun FileBrowserColumns(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun PendingSharePanel(
+    files: List<FileEntry>,
+    canSend: Boolean,
+    onSend: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val previewNames = files.take(3).joinToString(", ") { file -> file.name }
+    val remainingCount = files.size - 3
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f),
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.pending_share_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(Res.string.pending_share_ready),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = stringResource(Res.string.pending_share_count, files.size.toString(), previewNames),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (remainingCount > 0) {
+                Text(
+                    text = stringResource(Res.string.pending_share_more, remainingCount.toString()),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onSend,
+                    enabled = canSend,
+                ) {
+                    Text(stringResource(Res.string.pending_share_send))
+                }
+                OutlinedButton(onClick = onCancel) {
+                    Text(stringResource(Res.string.cancel))
+                }
+            }
+        }
     }
 }
 

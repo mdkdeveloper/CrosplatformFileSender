@@ -63,6 +63,11 @@
     <string name="request_download">Запитати отримання</string>
     <string name="send_selected">Надіслати вибране</string>
     <string name="download_selected">Завантажити вибране</string>
+    <string name="pending_share_title">Спільні файли готові</string>
+    <string name="pending_share_ready">Виберіть пристрій і відкрийте віддалену папку призначення перед надсиланням.</string>
+    <string name="pending_share_count">%1$s файл(ів): %2$s</string>
+    <string name="pending_share_more">+ ще %1$s</string>
+    <string name="pending_share_send">Надіслати спільні файли</string>
     <string name="invalid_transfer_destination">Відкрийте реальну папку призначення перед передачею файлів.</string>
     <string name="archive_download_title">Архівувати папку?</string>
     <string name="archive_download_message">Створити ZIP архів перед завантаженням вибраних папок?</string>

@@ -63,6 +63,11 @@
     <string name="request_download">Request download</string>
     <string name="send_selected">Send selected</string>
     <string name="download_selected">Download selected</string>
+    <string name="pending_share_title">Shared files ready</string>
+    <string name="pending_share_ready">Select a device and open a remote destination folder before sending.</string>
+    <string name="pending_share_count">%1$s file(s): %2$s</string>
+    <string name="pending_share_more">+ %1$s more</string>
+    <string name="pending_share_send">Send shared files</string>
     <string name="invalid_transfer_destination">Open a real destination folder before transferring files.</string>
     <string name="archive_download_title">Archive folder?</string>
     <string name="archive_download_message">Create a ZIP archive before downloading selected folders?</string>
